@@ -247,6 +247,7 @@ export const OptQuantity = (props) => {
                         autocomplete="off"
                         value={initialValue}
                         onchange={onchange}
+                        savedconfigurationvalue = {value.defaultValue}
                     />
                 </div>
             </div>

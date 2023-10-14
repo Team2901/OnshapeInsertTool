@@ -116,6 +116,7 @@ export const OptEnum = (props) => {
                             class={'cv' + index}
                             data-type="enum"
                             onchange={onchange}
+                            savedconfigurationvalue = {optEnum.defaultValue}
                         >
                             {optEnum.options.map((enumopt) => (
                                 <option value={enumopt.option}>

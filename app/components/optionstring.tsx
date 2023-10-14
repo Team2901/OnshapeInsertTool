@@ -65,6 +65,7 @@ export const OptString = (props) => {
                     placeholder=""
                     value={optString.defaultValue}
                     onchange={onchange}
+                    savedconfigurationvalue = {optString.defaultValue}
                 />
             </span>
         </os-string-parameter>

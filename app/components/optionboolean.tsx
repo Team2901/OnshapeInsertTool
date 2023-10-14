@@ -70,6 +70,7 @@ export const OptBool = (props) => {
                             data-parameter-value="true"
                             onchange={onchange}
                             checked={optBool.defaultValue}
+                            savedconfigurationvalue = {optBool.defaultValue}
                         />
                         <span class="os-checkbox-indicator"></span>
                         <span class="os-param-checkbox-label">
