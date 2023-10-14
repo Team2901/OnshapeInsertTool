@@ -29,6 +29,7 @@
   "dependencies": {
     "bootstrap": "^5.2.3",
     "js-cookie": "^3.0.1",
-    "onshape-typescript-fetch": "github:toebes/onshape-typescript-fetch"
+    "onshape-typescript-fetch": "github:toebes/onshape-typescript-fetch",
+    "style-loader": "^3.3.3"
   }
 }
