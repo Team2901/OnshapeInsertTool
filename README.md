@@ -6,21 +6,22 @@ This example shows how to create an Onshape client with a PHP backend (basically
 ## Initial setup
 
 1. Clone/fork the repository to your own machine to edit
-1. Identify a server where the minimal backend components will be hosted.  For purposes of this example, we shall assume that they are at https://ftconshape.com/oauthexample/
-1. Create an Onshape OAuth application at https://dev-portal.onshape.com/oauthApps.  When you create the App, remember the Secret (which you can only see once) and the client id.
-1. In the settings, set the redirect URL to be the URL from step 2.  Also, make sure you select an Admin team who has access to the applicaiton.
-1. Copy example_config.php as config.php and update the client id and client secret.
-1. For the settings in the Redirect URLs, point it to the location of the backend components (in this case `https://ftconshape.com/oauthexample/`)
-1. Create an extension entry (we are using an Element Right Panel here) and for the action URL, enter the following.  Note that you need to replace `<clientid>` with the client id you got in step 3 and the `<backenduri>` from step 2 but with the URL encoded (you can use https://www.urlencoder.org/ to encode the URL).  While you are there, don't forget to update the icon with a `.svg` file.
+2. Identify a server where the minimal backend components will be hosted.  For purposes of this example, we shall assume that they are at https://ftconshape.com/oauthexample/
+3. Create an Onshape OAuth application at https://dev-portal.onshape.com/oauthApps.  When you create the App, remember the Secret (which you can only see once) and the client id.
+4. In the settings, set the redirect URL to be the URL from step 2.  Also, make sure you select an Admin team who has access to the application.
+5. Set the OAuth URL entry to be the same as step 2 with `oauthsignin.php` added to the end of it.  (in this case: `https://ftconshape.com/oauthexample/oauthsignin.php`)
+6. Copy example_config.php as config.php and update the client id and client secret.
+7. For the settings in the Redirect URLs, point it to the location of the backend components (in this case `https://ftconshape.com/oauthexample/`)
+8. Create an extension entry (we are using an Element Right Panel here) and for the action URL, enter the following.  Note that you need to replace `<clientid>` with the client id you got in step 3 and the `<backenduri>` from step 2 but with the URL encoded (you can use https://www.urlencoder.org/ to encode the URL).  While you are there, don't forget to update the icon with a `.svg` file.
 
      `https://oauth.onshape.com/oauth/authorize?response_type=code&client_id=<clientid>%3D&redirect_uri=<backenduri>%3FdocumentId%3D{$documentId}%26workspaceId%3D{$workspaceOrVersionId}%26elementId%3D{$elementId}`
 
-1. Change the line in app/app.ts for myserver to be the server from step 1 (but leave off the trailing /)
+9. Change the line in app/app.ts for myserver to be the server from step 1 (but leave off the trailing /)
    ```
     public myserver = 'https://ftconshape.com/oauthexample';
     ```     
-1. Edit the example_ftpdeploy.js file and save it as .ftpdeploy.js putting in your credentials for FTPing files to the server
-1. Do a `npm run build` to ensure everything builds properly
+10. Edit the example_ftpdeploy.js file and save it as .ftpdeploy.js putting in your credentials for FTPing files to the server
+11. Do a `npm run build` to ensure everything builds properly
 
 ## Normal Development
 

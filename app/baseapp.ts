@@ -195,33 +195,35 @@ export class BaseApp {
                         href: this.myserver,
                     });
                     headElement.appendChild(baseRef);
-                    found.forEach((item) => {
-                        // The Links will be of the following form.  Note that
-                        // we only want the stylesheet ones.  We can ignore the others
-                        // <link rel="shortcut icon" href="/favicon.png">
-                        // <link href="/js/vendor-bundle.372f38798a62e5110c68.css" rel="stylesheet">
-                        // <link href="/css/woolsthorpe.17479501f16d0d4ce613.css" rel="stylesheet">
-                        if (item.match(/rel *= *['"]stylesheet["']/) !== null) {
-                            // Get the href portion of it.  Note that
-                            // match returns us both the full match (element 0)
-                            // and the exact match (element 1)
-                            const hrefRegex = /href=["']([^'"]+)/;
-                            const css = item.match(hrefRegex);
-                            // Did we get a match at all?
-                            if (css !== null && css.length > 1) {
-                                // We did.  Create a link element in the DOM
-                                var cssLink = createDocumentElement('link', {
-                                    href: `${this.myserver}/getfile.php?url=${
-                                        this.server + css[1]
-                                    }`,
-                                    rel: 'stylesheet',
-                                    type: 'text/css',
-                                });
-                                // Insert the element into the head of the IFrame
-                                headElement.appendChild(cssLink);
+                    if (found) {
+                        found.forEach((item) => {
+                            // The Links will be of the following form.  Note that
+                            // we only want the stylesheet ones.  We can ignore the others
+                            // <link rel="shortcut icon" href="/favicon.png">
+                            // <link href="/js/vendor-bundle.372f38798a62e5110c68.css" rel="stylesheet">
+                            // <link href="/css/woolsthorpe.17479501f16d0d4ce613.css" rel="stylesheet">
+                            if (item.match(/rel *= *['"]stylesheet["']/) !== null) {
+                                // Get the href portion of it.  Note that
+                                // match returns us both the full match (element 0)
+                                // and the exact match (element 1)
+                                const hrefRegex = /href=["']([^'"]+)/;
+                                const css = item.match(hrefRegex);
+                                // Did we get a match at all?
+                                if (css !== null && css.length > 1) {
+                                    // We did.  Create a link element in the DOM
+                                    var cssLink = createDocumentElement('link', {
+                                        href: `${this.myserver}/getfile.php?url=${
+                                            this.server + css[1]
+                                        }`,
+                                        rel: 'stylesheet',
+                                        type: 'text/css',
+                                    });
+                                    // Insert the element into the head of the IFrame
+                                    headElement.appendChild(cssLink);
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                 }
                 resolve(true);
             });
@@ -249,7 +251,6 @@ export class BaseApp {
      * The main initialization routine.  This is invoked once the web page is initially loaded
      */
     public init(): void {
-        this.showInitializing();
         let config: onshapeConfig = { myserver: this.myserver };
 
         // Parse query parameters
@@ -266,6 +267,13 @@ export class BaseApp {
             config[parm] = val;
         }
         // Figure out where Onshape was loaded from
+        const redirectURL =
+            config['redirectOnshapeUri'] == '' ? undefined : config['redirectOnshapeUri'];
+        if (redirectURL !== undefined) {
+            window.location = redirectURL;
+            return;
+        }
+        this.showInitializing();
         const url =
             window.location != window.parent.location
                 ? document.referrer
