@@ -1,6 +1,6 @@
 {
   "name": "oauthexample",
-  "version": "1.24.3",
+  "version": "1.24.4",
   "description": "",
   "main": "app/oauthexample.ts",
   "scripts": {
@@ -21,17 +21,14 @@
     "ftp-deploy": "^2.4.4",
     "html-webpack-plugin": "^5.5.3",
     "raw-loader": "^4.0.2",
-    "style-loader": "^3.3.3",
-    "svg-url-loader": "^8.0.0",
     "ts-loader": "^9.4.2",
     "typescript": "^4.9.5",
-    "webpack-bundle-analyzer": "^4.9.1",
+    "webpack-bundle-analyzer": "^4.9.0",
     "webpack-cli": "^5.1.4"
   },
   "dependencies": {
     "bootstrap": "^5.2.3",
     "js-cookie": "^3.0.1",
-    "onshape-typescript-fetch": "github:toebes/onshape-typescript-fetch",
-    "style-loader": "^3.3.3"
+    "onshape-typescript-fetch": "github:toebes/onshape-typescript-fetch"
   }
 }
