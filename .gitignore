@@ -6,3 +6,4 @@ generated/
 .ftpdeploy.js
 .ftpdeploy.*
 /app/app_settings.*
+.vscode/settings.json
