@@ -3,10 +3,10 @@ const ftpDeploy = new FtpDeploy();
 const settings = require('./.ftpdeploy.js');
 
 const config = {
-    user: settings.user, //'oauthexample@ftconshape.com',
+    user: settings.user, //'user@example.com',
     // Password optional, prompted if none given
-    password: settings.password, // 'OauthSec.42@@!',
-    host: settings.host, //'ftp.ftconshape.com',
+    password: settings.password,
+    host: settings.host, //'subdomain.example.com',
     port: settings.port,
     localRoot: __dirname + '/dist',
     remoteRoot: settings.remoteRoot,
