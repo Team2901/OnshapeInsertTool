@@ -1,9 +1,7 @@
 server/config.php
-/server/config.*
 node_modules/
 dist/
 generated/
-.ftpdeploy.js
 .ftpdeploy.*
-/app/app_settings.*
+/server/config.*
 .vscode/settings.json
