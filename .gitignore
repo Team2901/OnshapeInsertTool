@@ -3,4 +3,9 @@ node_modules/
 dist/
 generated/
 .ftpdeploy.js
+<<<<<<< HEAD
+=======
+.ftpdeploy.*
+/app/app_settings.*
+>>>>>>> dac8898 (Update .gitignore)
 .vscode/settings.json
