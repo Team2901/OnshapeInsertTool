@@ -9,6 +9,7 @@
     "dev": "webpack --mode=development",
     "preinstall": "npx npm-force-resolutions",
     "deploy": "node deploy",
+    "switch": "node switch",
     "deploy-dev": "npm run dev && npm run deploy",
     "deploy-prod": "npm run build && npm run deploy",
     "analyze": "webpack --mode=production --analyze --env=zip=y"
