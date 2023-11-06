@@ -21,13 +21,7 @@ In order to be configured in Onshape you need to:
 
      `https://oauth.onshape.com/oauth/authorize?response_type=code&client_id=<clientid>%3D&redirect_uri=<backenduri>%3FdocumentId%3D{$documentId}%26workspaceId%3D{$workspaceOrVersionId}%26elementId%3D{$elementId}`
 
-9. Change the line in `app/app.ts` for myserver to be the server from step 1 (but leave off the trailing /)
-
-   ```typescript
-    public myserver = 'https://ftconshape.com/inserttool';
-    ```
-
-10. Change `app/app_settings.json` to match the name of your application
+9. Change `app/app_settings.json` to match the name of your application
 
     ```typescript
     {
@@ -35,8 +29,8 @@ In order to be configured in Onshape you need to:
     }
     ```
   
-11. Edit the example_ftpdeploy.js file and save it as .ftpdeploy.js putting in your credentials for FTPing files to the server
-12. Do a `npm run build` to ensure everything builds properly
+10. Edit the example_ftpdeploy.js file and save it as .ftpdeploy.js putting in your credentials for FTPing files to the server
+11. Do a `npm run build` to ensure everything builds properly
 
 ## Normal Development
 
@@ -46,6 +40,36 @@ In order to be configured in Onshape you need to:
 If you have done everything right, when you add the application to your account, you should see an icon appear on the right hand edge of the screen (along with the configuration and appearance icons).  When you click on it, it may promopt you for permissions and then once it has been granted will show a dump of all the files you have shared with you.
 
 To make change to the application, edit the `app/app.ts` file.  It is built on top of the `app/baseapp.ts` file which has all the common routines.
+
+## Having two deployment locations
+
+When developming it is useful to have a test location as well as a production version.
+To accomplish this, you need to set up a second application with a separate store entry (steps 2-10 above).
+However so that you can keep separate copies of the location where you deploy as well as the
+store `client_id`/`client_secret` values you need to create copies of the `server/config.php` and `.ftpdeploy.js` files
+with the corresponding information.  You should make a copy of them in the same location, but append it with the name of the
+application that you chose.
+
+So if your main application was `inserttool` and the test version was `insertwork` you would have a total of 6 files
+
+* `server/config.php.inserttool` - The `client_id/client_secret for the inserttool application
+* `server/config.php.insertwork` - The `client_id/client_secret for the insertwork application
+* `server/config.php` - the currently selected one (a copy of one of the above two files)
+* `.ftpdeploy.js.inserttool` - The ftp credentials for copying to the inserttool location
+* `.ftpdeploy.js.insertwork` - The ftp credentials for copying to the insertwork location
+* `.ftpdeploy.js` - The currently selected one (a copy of one of the above two files)
+
+To switch, you just run
+
+```bash
+   npm run switch inserttool
+```
+
+or
+
+```bash
+   npm run switch insertwork
+```
 
 ## Calling Onshape APIs
 
