@@ -171,6 +171,7 @@ export class App extends BaseApp {
         RI: { icon: 'svg-icon-recentlyOpened', label: 'Recently Inserted' },
         FV: { icon: 'svg-icon-filter-favorite', label: 'Favorited' },
         LI: { icon: 'svg-icon-libraries', label: 'My Libraries' },
+        GL: { icon: 'svg-icon-library-public', label: 'Global Libraries'}
     };
     public actionMenuOptions: { [item: string]: actionMenuOptionInfo } = {
         NAME: {
@@ -1201,7 +1202,7 @@ export class App extends BaseApp {
                     case 'FAVORITE': {
                         this.setElemText(optionId, 'Loading favorited status...');
                         this.preferences
-                            .getAllFavorited()
+                            .getAllOfMagicType('favorited')
                             .then((favoriteList: BTGlobalTreeNodeMagicDataInfo[]) => {
                                 let favoriteItem: BTGlobalTreeNodeMagicDataInfo;
 
@@ -1229,9 +1230,12 @@ export class App extends BaseApp {
 
                                 optionElement.onclick = () => {
                                     if (itemFavorited) {
-                                        this.preferences.removeFavorited(item);
+                                        this.preferences.removeMagicNode(
+                                            item,
+                                            'favorited'
+                                        );
                                     } else {
-                                        this.preferences.addFavorited(item);
+                                        this.preferences.addMagicNode(item, 'favorited');
                                     }
                                     this.hideActionMenu();
                                 };
@@ -1269,7 +1273,7 @@ export class App extends BaseApp {
                     case 'ADDLIB': {
                         this.setElemText(optionId, 'Loading library status...');
                         this.preferences
-                            .getAllLibraries()
+                            .getAllOfMagicType('library')
                             .then((libraryList: BTGlobalTreeNodeMagicDataInfo[]) => {
                                 let libraryItem: BTGlobalTreeNodeMagicDataInfo;
 
@@ -1297,9 +1301,9 @@ export class App extends BaseApp {
 
                                 optionElement.onclick = () => {
                                     if (itemInLibrary) {
-                                        this.preferences.removeLibrary(item);
+                                        this.preferences.removeMagicNode(item, 'library');
                                     } else {
-                                        this.preferences.addLibrary(item);
+                                        this.preferences.addMagicNode(item, 'library');
                                     }
                                     this.hideActionMenu();
                                 };
@@ -1323,7 +1327,7 @@ export class App extends BaseApp {
                                         inputElement.value
                                     )
                                     .then((library) => {
-                                        this.preferences.addLibrary(library);
+                                        this.preferences.addMagicNode(library, 'library');
                                         this.hideActionMenu();
                                     });
                             };
@@ -1402,7 +1406,7 @@ export class App extends BaseApp {
                             const inputLibElement = document.getElementById(
                                 optionId + '_lib-name'
                             ) as HTMLInputElement;
-                            this.preferences.getAllLibraries().then((libraries) => {
+                            this.preferences.getAllOfMagicType('library').then((libraries) => {
                                 const libraryOptions: Array<{
                                     id: string;
                                     label: string;
@@ -1460,7 +1464,7 @@ export class App extends BaseApp {
                             const inputProxyElement = document.getElementById(
                                 optionId + '_proxy-name'
                             ) as HTMLInputElement;
-                            this.preferences.getAllLibraries().then((libraries) => {
+                            this.preferences.getAllOfMagicType('library').then((libraries) => {
                                 const libraryOptions: Array<{
                                     id: string;
                                     label: string;
@@ -1559,7 +1563,10 @@ export class App extends BaseApp {
                     }
                     case 'DELPROXY': {
                         optionElement.onclick = () => {
-                            if (item.treeHref === undefined || item.treeHref === item.projectId) {
+                            if (
+                                item.treeHref === undefined ||
+                                item.treeHref === item.projectId
+                            ) {
                                 //item's parent is library
                                 this.libraries
                                     .removeNodeFromProxyLibrary(
@@ -1599,7 +1606,7 @@ export class App extends BaseApp {
                             this.libraries
                                 .createLibraryFromFolder(item)
                                 .then((library) => {
-                                    this.preferences.addLibrary(library);
+                                    this.preferences.addMagicNode(library, 'library');
                                     this.hideActionMenu();
                                 });
                         };
@@ -2741,10 +2748,11 @@ export class App extends BaseApp {
             });
             documentNodeInfoConfig.configuration = JSON.stringify(configInfo);
 
-            this.preferences.addRecentlyInserted(documentNodeInfoConfig);
+            this.preferences.addMagicNode(documentNodeInfoConfig, 'recentlyInserted');
         } else {
-            this.preferences.addRecentlyInserted(
-                documentNodeInfo as BTGlobalTreeNodeInfo
+            this.preferences.removeMagicNode(
+                documentNodeInfo as BTGlobalTreeNodeInfo,
+                'recentlyInserted'
             );
         }
     }
@@ -2998,7 +3006,7 @@ export class App extends BaseApp {
     }
     public processLibrariesNode(index?: number, refreshNodes?: boolean) {
         this.preferences
-            .getLibraryByIndex(index, refreshNodes === true) //only refresh if we are getting first node
+            .getMagicTypeByIndex(index, 'library', refreshNodes) //only refresh if we are getting first node
             .then((res: BTGlobalTreeNodeInfo[]) => {
                 const pathToRoot = [
                     {
@@ -3027,7 +3035,7 @@ export class App extends BaseApp {
      */
     public processFavoritedNode(index?: number, refreshNodes?: boolean) {
         this.preferences
-            .getFavoritedByIndex(index, refreshNodes === true) //only refresh if we are getting first node
+            .getMagicTypeByIndex(index, 'favorited', refreshNodes) //only refresh if we are getting first node
             .then((res: BTGlobalTreeNodeInfo[]) => {
                 const pathToRoot = [
                     {
@@ -3056,7 +3064,7 @@ export class App extends BaseApp {
      */
     public processRecentlyInsertedNode(index?: number, refreshNodes?: boolean) {
         this.preferences
-            .getRecentlyInsertedByIndex(index, refreshNodes === true) //only refresh if we are getting first node
+            .getMagicTypeByIndex(index, 'recentlyInserted', refreshNodes) //only refresh if we are getting first node
             .then((res: BTGlobalTreeNodeInfo[]) => {
                 const pathToRoot = [
                     {
@@ -3064,6 +3072,36 @@ export class App extends BaseApp {
                         resourceType: 'magic',
                         id: 'RI',
                         name: 'Recently Inserted',
+                    },
+                ];
+                this.setBreadcrumbs(pathToRoot);
+                if (res === undefined || res === null) {
+                    return;
+                }
+                const recentNode: BTGlobalTreeNodesInfo = {
+                    pathToRoot,
+                    next: (index + 1).toString(),
+                    href: undefined,
+                    items: res,
+                };
+                this.ProcessNodeResults(recentNode, undefined, true);
+            });
+    }
+
+    /**
+     * Process the results of the global libraries node
+     * @param index what index global library node it should fetch and process
+     */
+    public processGlobalLibrariesNode(index?: number, refreshNodes?: boolean) {
+        this.preferences
+            .getMagicTypeByIndex(index, 'globalLibraries', refreshNodes) //only refresh if we are getting first node
+            .then((res: BTGlobalTreeNodeInfo[]) => {
+                const pathToRoot = [
+                    {
+                        jsonType: 'magic',
+                        resourceType: 'magic',
+                        id: 'GL',
+                        name: 'Global Libraries',
                     },
                 ];
                 this.setBreadcrumbs(pathToRoot);
@@ -3093,6 +3131,8 @@ export class App extends BaseApp {
         } else if (magic === 'LI') {
             this.processLibrariesNode(0, true);
             return;
+        } else if (magic === 'GL') {
+            this.processGlobalLibrariesNode(0, true);
         }
         // uri: string) {
         // Get Onshape to return the list

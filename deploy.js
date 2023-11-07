@@ -3,9 +3,10 @@ const ftpDeploy = new FtpDeploy();
 const settings = require('./.ftpdeploy.js');
 
 const config = {
-    user: settings.user, //'user@domain.com',
-    password: settings.password, // 'XXXXXXXX', // Password optional, prompted if none given
-    host: settings.host, //'ftp.domain.com',
+    user: settings.user, //'user@example.com',
+    // Password optional, prompted if none given
+    password: settings.password,
+    host: settings.host, //'subdomain.example.com',
     port: settings.port,
     localRoot: __dirname + '/dist',
     remoteRoot: settings.remoteRoot,
