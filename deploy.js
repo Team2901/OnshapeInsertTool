@@ -3,17 +3,22 @@ const ftpDeploy = new FtpDeploy();
 const settings = require('./.ftpdeploy.js');
 
 const config = {
-    user: settings.user, //'oauthexample@ftconshape.com',
-    // Password optional, prompted if none given
-    password: settings.password, // 'OauthSec.42@@!',
-    host: settings.host, //'ftp.ftconshape.com',
+    user: settings.user, //'user@domain.com',
+    password: settings.password, // 'XXXXXXXX', // Password optional, prompted if none given
+    host: settings.host, //'ftp.domain.com',
     port: settings.port,
     localRoot: __dirname + '/dist',
     remoteRoot: settings.remoteRoot,
-    include: ['*', '**/*', '.htaccess', '**/.htaccess'], // this would upload everything except dot files
-    //include: ["*.js", "dist/*", ".*"],
-    // e.g. exclude sourcemaps, and ALL files in node_modules (including dot files)
-    exclude: ['example_config.php'],
+    include: [
+        '*', // Everything in the main directory (except dot files)
+        '**/*', // Everything in all sub directories (except dot files)
+        '.htaccess', // .htaccess in the main directory
+        '**/.htaccess', // .htaccess in all sub directories
+    ],
+
+    exclude: [
+        'example_config.php', // Don't upload the example_config.php because it isn't needed for the server
+    ],
     // delete ALL existing files at destination before uploading, if true
     deleteRemote: settings.deleteRemote,
     // Passive mode is forced (EPSV command is not sent)
