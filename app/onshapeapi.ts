@@ -461,8 +461,17 @@ export class OnshapeAPI {
         ) {
             verPart = `/v/${item.recentVersion.id}`;
         }
-        let imageURL = `${this.myserver}/api/thumbnails/d/${item.id}${verPart}/s/${width}x${height}`;
-        if (item.thumbnail !== undefined && item.thumbnail !== null) {
+        console.log(item, 'for image thumbnail creation');
+        let imageURL = `${this.myserver}/api/thumbnails/d/${item.id}`;
+        if (item['elementType'] === 'PARTSTUDIO') {
+            imageURL += `/w/${item.defaultWorkspace.id}`;
+            imageURL += `/e/${item['elementId']}`;
+        } else {
+            imageURL += `${verPart}`;
+        }
+        imageURL += `/s/${width}x${height}`;
+
+        if (item.thumbnail !== undefined && item.thumbnail !== null && item['elementType'] !== 'PARTSTUDIO') {
             // We have a potential thumbnail URI we can work from
             // See if we can find a URI that matches
             for (let thumbnailInfo of item.thumbnail.sizes) {
