@@ -94,14 +94,14 @@ export class Preferences {
         recentlyInserted: [],
         favorited: [],
         library: [],
-        globalLibraries: [],
+        // globalLibraries: [],
     };
 
     magicTypeToBTGType: { [magicType: string]: string } = {
         recentlyInserted: 'recent',
         favorited: 'favorited',
         library: 'libraries',
-        globalLibraries: 'global_libraries',
+        // globalLibraries: 'global_libraries',
     };
 
     /**
@@ -503,25 +503,25 @@ export class Preferences {
                             [pref_name: string]: Array<BTGlobalTreeNodeInfo>;
                         } = {};
                         for (let pref_name of pref_names) {
-                            allResults[pref_name] = [];
-                            for (let btg_json of res[pref_name]) {
-                                allResults[pref_name].push(
-                                    BTGlobalTreeNodeMagicDataInfoJSONTyped(
-                                        btg_json,
-                                        false
-                                    )
-                                );
-                            }
+                            allResults[pref_name] = res[pref_name];
+                            // for (let btg_json of res[pref_name]) {
+                            //     allResults[pref_name].push(
+                            //         BTGlobalTreeNodeMagicDataInfoJSONTyped(
+                            //             btg_json,
+                            //             false
+                            //         )
+                            //     );
+                            // }
                         }
                         resolve(allResults);
                     } else {
-                        const result: Array<BTGlobalTreeNodeInfo> = [];
+                        const result: Array<BTGlobalTreeNodeInfo> = res[pref_name];
                         pref_name = pref_name as string;
-                        for (let btg_json of res[pref_name]) {
-                            result.push(
-                                BTGlobalTreeNodeMagicDataInfoJSONTyped(btg_json, false)
-                            );
-                        }
+                        // for (let btg_json of res[pref_name]) {
+                        //     result.push(
+                        //         BTGlobalTreeNodeMagicDataInfoJSONTyped(btg_json, false)
+                        //     );
+                        // }
                         resolve(result);
                     }
                 })

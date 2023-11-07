@@ -249,107 +249,97 @@ export class Library extends Preferences {
     ) {
         console.log('cloning folder into library', arguments);
         return new Promise((resolve, reject) => {
-            this.onshape.globalTreeNodesApi
-                .globalTreeNodesFolderInsertables({
-                    fid: folder.id,
-                    getPathToRoot: true,
-                    includeAssemblies: true,
-                    includeFlattenedBodies: true,
-                    includeParts: true,
-                    includeSketches: false,
-                    includeSurfaces: false,
-                    limit: 50,
-                })
-                .then((res) => {
-                    //res.pathToRoot
-                    //res.items
-                    const promises = [];
+            this.getAllGlobalTreeNodesFolderInsertables(folder.id).then((res) => {
+                //res.pathToRoot
+                //res.items
+                const promises = [];
 
-                    const children = res.items;
-                    const documentChildren = [];
-                    const folderChildren = [];
-                    children.sort((child1, child2) =>
-                        child1.name.localeCompare(child2.name)
+                const children = res;
+                const documentChildren = [];
+                const folderChildren = [];
+                children.sort((child1, child2) => child1.name.localeCompare(child2.name));
+                children.forEach((child) => {
+                    if (child.jsonType === 'document-summary') {
+                        documentChildren.push(child);
+                    } else if (child.jsonType === 'folder') {
+                        folderChildren.push({
+                            jsonType: 'proxy-folder',
+                            name: child.name,
+                            id: child.id,
+                            isContainer: true,
+                            projectId: library.id,
+                            owner: {
+                                id: this.onshape.userId,
+                            },
+                        } as BTGlobalTreeNodeInfo);
+                    }
+                });
+                console.log('children: ', children);
+                if (isLibrary === true) {
+                    console.log('cloning children into library');
+                    folderChildren.forEach((child) =>
+                        promises.push(
+                            this.cloneFolderIntoLibrary(
+                                child,
+                                library,
+                                undefined,
+                                false,
+                                descendantArray
+                            )
+                        )
                     );
-                    children.forEach((child) => {
-                        if (child.jsonType === 'document-summary') {
-                            documentChildren.push(child);
-                        } else if (child.jsonType === 'folder') {
-                            folderChildren.push({
-                                jsonType: 'proxy-folder',
-                                name: child.name,
-                                id: child.id,
-                                isContainer: true,
-                                projectId: library.id,
-                            } as BTGlobalTreeNodeInfo);
-                        }
-                    });
-                    console.log('children: ', children);
-                    if (isLibrary === true) {
-                        console.log('cloning children into library');
+                    promises.push(
+                        this.setProxyLibrary(
+                            library,
+                            folderChildren.concat(documentChildren)
+                        )
+                    );
+                    resolve(Promise.all(promises));
+                } else {
+                    console.log('cloning children into folder');
+                    this.createProxyFolder(
+                        library,
+                        folder,
+                        parent,
+                        folderChildren.concat(documentChildren),
+                        true, //ADD STUFF IN THENEHENEJ CODE
+                        true
+                    ).then((proxyFolder: BTGlobalTreeNodeInfo) => {
+                        descendantArray.push(proxyFolder);
+                        // if (parent !== undefined) {
+                        //     console.log('parent', parent, children)
+                        //     promises.push(
+                        //         this.addNodeToProxyFolder(
+                        //             proxyFolder,
+                        //             library,
+                        //             parent
+                        //         )
+                        //     );
+                        // } else {
+                        //     promises.push(
+                        //         this.addNodeToProxyLibrary(
+                        //             proxyFolder,
+                        //             undefined,
+                        //             library.id
+                        //         )
+                        //     );
+                        // }
+                        // this.setProxyFolder(library, proxyFolder, children);
                         folderChildren.forEach((child) =>
                             promises.push(
                                 this.cloneFolderIntoLibrary(
                                     child,
                                     library,
-                                    undefined,
+                                    proxyFolder,
                                     false,
                                     descendantArray
                                 )
                             )
                         );
-                        promises.push(
-                            this.setProxyLibrary(
-                                library,
-                                folderChildren.concat(documentChildren)
-                            )
-                        );
                         resolve(Promise.all(promises));
-                    } else {
-                        console.log('cloning children into folder');
-                        this.createProxyFolder(
-                            library,
-                            folder,
-                            parent,
-                            folderChildren.concat(documentChildren),
-                            true, //ADD STUFF IN THENEHENEJ CODE
-                            true
-                        ).then((proxyFolder: BTGlobalTreeNodeInfo) => {
-                            descendantArray.push(proxyFolder);
-                            // if (parent !== undefined) {
-                            //     console.log('parent', parent, children)
-                            //     promises.push(
-                            //         this.addNodeToProxyFolder(
-                            //             proxyFolder,
-                            //             library,
-                            //             parent
-                            //         )
-                            //     );
-                            // } else {
-                            //     promises.push(
-                            //         this.addNodeToProxyLibrary(
-                            //             proxyFolder,
-                            //             undefined,
-                            //             library.id
-                            //         )
-                            //     );
-                            // }
-                            // this.setProxyFolder(library, proxyFolder, children);
-                            folderChildren.forEach((child) =>
-                                promises.push(
-                                    this.cloneFolderIntoLibrary(
-                                        child,
-                                        library,
-                                        proxyFolder,
-                                        false,
-                                        descendantArray
-                                    )
-                                )
-                            );
-                            resolve(Promise.all(promises));
-                        });
-                    }
-                });
+                    });
+                }
+            });
         });
     }
 
@@ -373,6 +363,43 @@ export class Library extends Preferences {
                     resolve(library);
                 });
             });
+        });
+    }
+
+    public getAllGlobalTreeNodesFolderInsertables(
+        id: string,
+        addto?: BTGlobalTreeNodeInfo[],
+        offset?: number
+    ): Promise<BTGlobalTreeNodeInfo[]> {
+        return new Promise((res, rej) => {
+            this.onshape.globalTreeNodesApi
+                .globalTreeNodesFolderInsertables({
+                    fid: id,
+                    getPathToRoot: true,
+                    includeAssemblies: true,
+                    includeFlattenedBodies: true,
+                    includeParts: true,
+                    includeSketches: false,
+                    includeSurfaces: false,
+                    limit: 50,
+                    offset: offset !== undefined ? offset : 0,
+                })
+                .then((res1) => {
+                    if (res1.items.length === 50) {
+                        res(
+                            this.getAllGlobalTreeNodesFolderInsertables(
+                                id,
+                                res1.items,
+                                offset + 50
+                            )
+                        );
+                    }
+                    if (addto) {
+                        res1.items.forEach((item) => addto.push(item));
+                        res(addto);
+                    }
+                    res(res1.items);
+                });
         });
     }
 
@@ -428,6 +455,14 @@ export class Library extends Preferences {
         });
     }
 
+    public refactorFolder(
+        folder: BTGlobalTreeNodeInfo,
+        library: BTGlobalTreeNodeInfo,
+        parent?: BTGlobalTreeNodeInfo,
+        isLibrary?: boolean,
+        descendantArray?: BTGlobalTreeNodeInfo[]
+    ) {}
+
     /*********************************************************************************
      *                         PROXY LIBRARY/FOLDER ROUTINES                         *
      *********************************************************************************/
@@ -459,10 +494,12 @@ export class Library extends Preferences {
                         .then((res2) => {
                             //NOT GOOD PRACTICE, but it takes onshape some time to make a file
                             setTimeout(() => {
-                                this.getProxyLibrary(undefined, res2.newDocumentId).then((res3) => {
-                                    if (res3 === undefined) resolve(undefined);
-                                    resolve(res3.library);
-                                });
+                                this.getProxyLibrary(undefined, res2.newDocumentId).then(
+                                    (res3) => {
+                                        if (res3 === undefined) resolve(undefined);
+                                        resolve(res3.library);
+                                    }
+                                );
                             }, 5000);
                         });
                 } else {
@@ -495,6 +532,9 @@ export class Library extends Preferences {
                 id: reference.id || (parent || library).id + '.' + reference.name,
                 name: reference.name,
                 projectId: library.id, //This works for now, cheap fix
+                owner: {
+                    id: this.onshape.userId,
+                },
             };
             console.log('proxy folder looking like ', proxyFolder);
             if (
@@ -552,10 +592,10 @@ export class Library extends Preferences {
         library: BTGlobalTreeNodeInfo,
         entries: Array<BTGlobalTreeNodeInfo>
     ): Promise<boolean> {
-        console.log('library set to : ', entries);
+        // console.log('library set to : ', entries);
         return new Promise((resolve, _reject) => {
-            console.log('-ElementID-', library['elementId']);
-            console.log('_______');
+            // console.log('-ElementID-', library['elementId']);
+            // console.log('_______');
             this.setBTGArray(this.proxyChildrenName, entries, library).then((res) => {
                 resolve(res);
             });

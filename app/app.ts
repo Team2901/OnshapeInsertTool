@@ -102,15 +102,16 @@ export interface folderLocation {
 }
 
 export interface actionMenuOptionInfo {
-    parentType: string[];
-    documentType?: string[];
-    excludeParentType?: string[];
-    name: string;
-    label?: string;
-    element?: Element;
-    input?: actionMenuOptionInputInfo[];
-    deleteIcon?: boolean;
-    parentWithoutDocument?: string[];
+    parentType: string[]; // parent json-type
+    documentType?: string[]; //document json-type
+    excludeParentType?: string[]; //don't render if parent json-type is one of these
+    name: string; //name for ui classes
+    label?: string; //label to be rendered in the contect menu
+    element?: Element; //don't need this?
+    input?: actionMenuOptionInputInfo[]; //input info
+    deleteIcon?: boolean; //
+    parentWithoutDocument?: string[]; // rendered if no document is selected and parent json type is one of these
+    userOwned?: boolean; //document is owned by this user
 }
 
 export interface actionMenuOptionInputInfo {
@@ -135,6 +136,14 @@ export class App extends BaseApp {
         insertInfo: configInsertInfo,
         nodeInfo: BTGlobalTreeNodeInfo
     ) => void = this.insertToOther;
+
+    private globalLibrariesNodes: string[] = [
+        'f3b99a8450b4f983b1efa03c', //Pitsco
+        '65d1b86ea725f780582d9dd0', //GoBilda
+        '2fd951db6d0261aba5f16a5d', //AndyMark
+        '1348b49fc35396eed14d589b', //ServoCity
+        'b71490095d0a6e87f29c4975', //REV Robotics
+    ];
 
     public magicInfo: { [item: string]: magicIconInfo } = {
         '0': { icon: 'svg-icon-recentlyOpened', label: 'Recently Opened' },
@@ -171,7 +180,7 @@ export class App extends BaseApp {
         RI: { icon: 'svg-icon-recentlyOpened', label: 'Recently Inserted' },
         FV: { icon: 'svg-icon-filter-favorite', label: 'Favorited' },
         LI: { icon: 'svg-icon-libraries', label: 'My Libraries' },
-        GL: { icon: 'svg-icon-library-public', label: 'Global Libraries'}
+        GL: { icon: 'svg-icon-library-public', label: 'Global Libraries' },
     };
     public actionMenuOptions: { [item: string]: actionMenuOptionInfo } = {
         NAME: {
@@ -207,13 +216,13 @@ export class App extends BaseApp {
             name: 'favorite',
             label: 'Loading favorite status...',
         },
-        CLONELIB: {
-            parentType: ['any'], //exclude: LI / My Libraries
-            // excludeParentType: ['LI'], //library in my libraries shouldn't be cloneable
-            documentType: ['proxy-library'],
-            name: 'clonepartslibrary',
-            label: 'Clone this parts library into My Libraries',
-        },
+        // CLONELIB: {
+        //     parentType: ['any'], //exclude: LI / My Libraries
+        //     excludeParentType: ['LI','GL'], //library in my libraries shouldn't be cloneable
+        //     documentType: ['proxy-library'],
+        //     name: 'clonepartslibrary',
+        //     label: 'Clone this parts library into My Libraries',
+        // },
         ADDLIB: {
             parentType: ['any'],
             documentType: ['proxy-library'],
@@ -246,6 +255,7 @@ export class App extends BaseApp {
                     type: 'select',
                 },
             ],
+            userOwned: true,
         },
         ADDPROXYDOC: {
             parentType: ['any'],
@@ -264,6 +274,7 @@ export class App extends BaseApp {
                     type: 'select',
                 },
             ],
+            userOwned: true,
         },
         REPROXYDOC: {
             parentType: ['proxy-folder'],
@@ -271,6 +282,7 @@ export class App extends BaseApp {
             name: 'removedocumentfromproxy',
             label: 'Remove document from library folder',
             deleteIcon: true,
+            userOwned: true,
         },
         RELIBDOC: {
             parentType: ['proxy-library'],
@@ -278,10 +290,12 @@ export class App extends BaseApp {
             name: 'removedocumentfromlibrary',
             label: 'Remove document from library',
             deleteIcon: true,
+            userOwned: true,
         },
         CREATEPROXY: {
             parentType: ['any'],
             documentType: ['proxy-library', 'proxy-folder'],
+            excludeParentType: ['GL'],
             name: 'createproxyfolder',
             label: 'Create folder for library',
             input: [
@@ -292,6 +306,7 @@ export class App extends BaseApp {
                 },
             ],
             parentWithoutDocument: ['proxy-library', 'proxy-folder'],
+            userOwned: true,
         },
         DELPROXY: {
             parentType: ['proxy-library', 'proxy-folder'],
@@ -299,12 +314,41 @@ export class App extends BaseApp {
             name: 'deleteproxyfolder',
             label: 'Remove folder',
             deleteIcon: true,
+            userOwned: true,
+        },
+        MOVEPROXY: {
+            parentType: ['proxy-library', 'proxy-folder'],
+            documentType: ['proxy-folder'],
+            name: 'movefolder',
+            label: 'Move Folder',
+            userOwned: true,
+            input: [
+                {
+                    name: 'newlocation',
+                    label: 'New location',
+                    type: 'select',
+                },
+            ],
         },
         CLONEFOLDER: {
             parentType: ['any'],
             documentType: ['folder'],
             name: 'createlibraryfromfolder',
             label: 'Create a parts library from folder',
+        },
+        BUILDDESC: {
+            parentType: ['LI'], //any?
+            documentType: ['proxy-library'],
+            userOwned: true,
+            name: 'rebuilddocdescendants',
+            label: 'Rebuild document descendants',
+        },
+        SCANDELTA: {
+            parentType: ['LI'], //any?
+            documentType: ['proxy-library'],
+            userOwned: true,
+            name: 'scandelta',
+            label: 'Scan library for changes',
         },
     };
     public preferences: Preferences;
@@ -772,6 +816,7 @@ export class App extends BaseApp {
             this.hidePopup();
         };
         items.map((item) => {
+            console.log('appending elements: item', item);
             const itemInfo = item as BTDocumentSummaryInfo;
             // Have we hit the limit?  If so then just skip out
             if (this.loaded >= this.loadedlimit) {
@@ -1116,6 +1161,17 @@ export class App extends BaseApp {
                     ) as HTMLButtonElement;
                 }
 
+                //makes sure user ownership status is right
+                if (option.userOwned) {
+                    if (
+                        (item.owner && item.owner.id === this.onshape.userId) ||
+                        (item.createdBy && item.createdBy.id === this.onshape.userId)
+                    ) {
+                        optionElement.parentElement.style.display = 'none';
+                        continue;
+                    }
+                }
+
                 if (backgroundMenu) {
                     item = parentNode;
                     if (option.parentWithoutDocument === undefined) {
@@ -1157,7 +1213,10 @@ export class App extends BaseApp {
                     if (option.excludeParentType) {
                         let correctPlacement = true;
                         option.excludeParentType.forEach((excludeType) => {
-                            if (excludeType === item.jsonType || excludeType === item.id)
+                            if (
+                                excludeType === parentNode.jsonType ||
+                                excludeType === parentNode.id
+                            )
                                 correctPlacement = false;
                         });
                         if (!correctPlacement) {
@@ -1279,10 +1338,7 @@ export class App extends BaseApp {
 
                                 for (let i in libraryList) {
                                     libraryItem = libraryList[i];
-                                    if (
-                                        libraryItem.id === item.id &&
-                                        libraryItem.configuration === item.configuration
-                                    ) {
+                                    if (libraryItem.id === item.id) {
                                         break;
                                     } else {
                                         libraryItem = undefined;
@@ -1290,7 +1346,6 @@ export class App extends BaseApp {
                                 }
 
                                 const itemInLibrary = libraryItem !== undefined;
-                                console.log(itemInLibrary);
                                 const libraryStatus = itemInLibrary
                                     ? ['Remove', 'from']
                                     : ['Add', 'to'];
@@ -1406,22 +1461,24 @@ export class App extends BaseApp {
                             const inputLibElement = document.getElementById(
                                 optionId + '_lib-name'
                             ) as HTMLInputElement;
-                            this.preferences.getAllOfMagicType('library').then((libraries) => {
-                                const libraryOptions: Array<{
-                                    id: string;
-                                    label: string;
-                                }> = [];
-                                libraries.forEach((library) => {
-                                    libraryOptions.push({
-                                        id: library.id,
-                                        label: library.name,
+                            this.preferences
+                                .getAllOfMagicType('library')
+                                .then((libraries) => {
+                                    const libraryOptions: Array<{
+                                        id: string;
+                                        label: string;
+                                    }> = [];
+                                    libraries.forEach((library) => {
+                                        libraryOptions.push({
+                                            id: library.id,
+                                            label: library.name,
+                                        });
+                                        this.updateActionMenuInputOptions(
+                                            inputLibElement.id,
+                                            libraryOptions
+                                        );
                                     });
-                                    this.updateActionMenuInputOptions(
-                                        inputLibElement.id,
-                                        libraryOptions
-                                    );
                                 });
-                            });
                             inputDiv.style.display = 'flex';
                             submitElement.onclick = (e) => {
                                 e.preventDefault();
@@ -1464,22 +1521,24 @@ export class App extends BaseApp {
                             const inputProxyElement = document.getElementById(
                                 optionId + '_proxy-name'
                             ) as HTMLInputElement;
-                            this.preferences.getAllOfMagicType('library').then((libraries) => {
-                                const libraryOptions: Array<{
-                                    id: string;
-                                    label: string;
-                                }> = [];
-                                libraries.forEach((library) => {
-                                    libraryOptions.push({
-                                        id: library.id,
-                                        label: library.name,
+                            this.preferences
+                                .getAllOfMagicType('library')
+                                .then((libraries) => {
+                                    const libraryOptions: Array<{
+                                        id: string;
+                                        label: string;
+                                    }> = [];
+                                    libraries.forEach((library) => {
+                                        libraryOptions.push({
+                                            id: library.id,
+                                            label: library.name,
+                                        });
+                                        this.updateActionMenuInputOptions(
+                                            inputLibElement.id,
+                                            libraryOptions
+                                        );
                                     });
-                                    this.updateActionMenuInputOptions(
-                                        inputLibElement.id,
-                                        libraryOptions
-                                    );
                                 });
-                            });
                             inputLibElement.onchange = () => {
                                 const libraryId = inputLibElement.value;
                                 console.log(libraryId);
@@ -1742,11 +1801,8 @@ export class App extends BaseApp {
                 const actionMenuOptionDeleteIcon = createDocumentElement('svg', {
                     class: 'context-menu-icon',
                     xmlns: 'http://www.w3.org/2000/svg',
+                    innerHTML: '<use xlink:href="#svg-icon-clear-field-button"></use>',
                 });
-                const actionMenuOptionDeleteIconUse = createDocumentElement('use', {
-                    href: '#svg-icon-clear-field-button',
-                });
-                actionMenuOptionDeleteIcon.appendChild(actionMenuOptionDeleteIconUse);
                 actionMenuOptionList.appendChild(actionMenuOptionDeleteIcon);
             }
             actionMenuOptionList.appendChild(actionMenuOptionSpan);
@@ -2332,7 +2388,11 @@ export class App extends BaseApp {
             const childThumbnailDiv = createDocumentElement('div', {
                 class: 'select-item-dialog-thumbnail-container os-no-shrink',
             });
-            const imgChildThumbnail = this.onshape.createThumbnailImage(parent, {
+            console.log('parent: ', parent, 'item: ', item);
+            const thumbnailInfo = Object.assign({}, parent);
+            thumbnailInfo['elementId'] = item.elementId;
+            thumbnailInfo['elementType'] = item.elementType;
+            const imgChildThumbnail = this.onshape.createThumbnailImage(thumbnailInfo, {
                 id: `ci${index}`,
             });
             childThumbnailDiv.append(imgChildThumbnail);
@@ -3093,29 +3153,37 @@ export class App extends BaseApp {
      * @param index what index global library node it should fetch and process
      */
     public processGlobalLibrariesNode(index?: number, refreshNodes?: boolean) {
-        this.preferences
-            .getMagicTypeByIndex(index, 'globalLibraries', refreshNodes) //only refresh if we are getting first node
-            .then((res: BTGlobalTreeNodeInfo[]) => {
-                const pathToRoot = [
-                    {
-                        jsonType: 'magic',
-                        resourceType: 'magic',
-                        id: 'GL',
-                        name: 'Global Libraries',
-                    },
-                ];
-                this.setBreadcrumbs(pathToRoot);
-                if (res === undefined || res === null) {
-                    return;
-                }
-                const recentNode: BTGlobalTreeNodesInfo = {
-                    pathToRoot,
-                    next: (index + 1).toString(),
-                    href: undefined,
-                    items: res,
-                };
-                this.ProcessNodeResults(recentNode, undefined, true);
-            });
+        this.preferences;
+        const documentRequests: Promise<BTGlobalTreeNodeInfo>[] = [];
+        for (let did of this.globalLibrariesNodes) {
+            documentRequests.push(this.onshape.documentApi.getDocument({ did }));
+        }
+        Promise.all(documentRequests).then((documents: BTGlobalTreeNodeInfo[]) => {
+            console.log(documents);
+            const pathToRoot = [
+                {
+                    jsonType: 'magic',
+                    resourceType: 'magic',
+                    id: 'GL',
+                    name: 'Global Libraries',
+                },
+            ];
+            this.setBreadcrumbs(pathToRoot);
+            // if (res === undefined || res === null) {
+            //     return;
+            // }
+            const recentNode: BTGlobalTreeNodesInfo = {
+                pathToRoot,
+                next: (index + 1).toString(),
+                href: undefined,
+                items: documents,
+            };
+            this.ProcessNodeResults(recentNode, undefined, true);
+        });
+        // .getMagicTypeByIndex(index, 'globalLibraries', refreshNodes) //only refresh if we are getting first node
+        // .then((res: BTGlobalTreeNodeInfo[]) => {
+
+        // });
     }
     /**
      * Process a single node entry
