@@ -89,6 +89,21 @@ export class Preferences {
     public onshape: OnshapeAPI;
     public userPreferencesInfo: BTGlobalTreeProxyInfo = undefined;
 
+    //magic nodes cache for getting by index
+    magicNodes: { [name: string]: BTGlobalTreeNodeInfo[] } = {
+        recentlyInserted: [],
+        favorited: [],
+        library: [],
+        globalLibraries: [],
+    };
+
+    magicTypeToBTGType: { [magicType: string]: string } = {
+        recentlyInserted: 'recent',
+        favorited: 'favorited',
+        library: 'libraries',
+        globalLibraries: 'global_libraries',
+    };
+
     /**
      * Initialize the app because we have gotten permission from Onshape to access content
      */
@@ -106,7 +121,7 @@ export class Preferences {
                 .then((res) => {
                     this.getAppElement(appName, this.userPreferencesInfo)
                         .then((res) => {
-                            console.log(res)
+                            console.log(res);
                             resolve(this.userPreferencesInfo);
                         })
                         .catch((err) => {
@@ -131,13 +146,13 @@ export class Preferences {
     ): Promise<boolean> {
         return new Promise((resolve, _reject) => {
             /* Backward compatability from when this was needed for JsonPatch */
-            this.setCustom(name, "", libInfo)
-            .then((res) => {
-                resolve(res);
-            })
-            .catch((err) => {
-                resolve(false);
-            });
+            this.setCustom(name, '', libInfo)
+                .then((res) => {
+                    resolve(res);
+                })
+                .catch((err) => {
+                    resolve(false);
+                });
         });
     }
 
@@ -156,9 +171,9 @@ export class Preferences {
             this.getAppJson(libInfo)
                 .then((res) => {
                     res[name] = element;
-                    this.onshape.blobElementApi.uploadFileUpdateElement(
-                        {
-                            encodedFilename: res["appName"],
+                    this.onshape.blobElementApi
+                        .uploadFileUpdateElement({
+                            encodedFilename: res['appName'],
                             did: libInfo.id,
                             wid: libInfo.wvmid,
                             eid: libInfo.elementId,
@@ -173,7 +188,7 @@ export class Preferences {
                         })
                         .catch((err) => {
                             resolve(false);
-                    });
+                        });
 
                     resolve(true);
                 })
@@ -248,270 +263,185 @@ export class Preferences {
     ): Promise<Array<BTGlobalTreeNodeInfo>> {
         return this.getBTGArray('home', libInfo);
     }
+
     /**
-     * Add an item to the list of favorited items associated with the application.  Note that it only stores the last 50 sorted by date
+     * Add an item to the list of the magicNodes type associated with the application.  Note that it only stores the limit amount if input
      * @param item Item to add to the insert list
      */
-    public addFavorited(
+    public addMagicNode(
         item: BTGlobalTreeNodeMagicDataInfo,
-        limit: number = 50,
-        name: string = 'favorited',
-        libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
+        magicType: string,
+        libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo,
+        limit?: number
     ): Promise<boolean> {
         return new Promise((resolve, _reject) => {
-            console.log(item);
-            this.getAllFavorited().then((favoriteList: BTGlobalTreeNodeInfo[]) => {
-                const newFavoriteList: BTGlobalTreeNodeInfo[] = [];
-                let favoriteItem: BTGlobalTreeNodeMagicDataInfo;
+            const BTGType = this.magicTypeToBTGType[magicType];
+            this.getAllOfMagicType(magicType).then((nodes: BTGlobalTreeNodeInfo[]) => {
+                const newNodes: BTGlobalTreeNodeInfo[] = [];
+                let node: BTGlobalTreeNodeMagicDataInfo;
                 let duplicate: BTGlobalTreeNodeMagicDataInfo;
-                //Iterate favoriteList and don't add duplicates to new list
-                favoriteList.unshift(item);
-                for (let i in favoriteList) {
-                    favoriteItem = favoriteList[i];
-                    duplicate = newFavoriteList.find(
+                //Iterate nodes and don't add duplicates to new list
+                nodes.unshift(item);
+                for (let i in nodes) {
+                    node = nodes[i];
+                    duplicate = newNodes.find(
                         (element: BTGlobalTreeNodeMagicDataInfo) => {
                             return (
-                                element.id === favoriteItem.id &&
-                                element.configuration === favoriteItem.configuration
+                                element.id === node.id &&
+                                element.configuration === node.configuration
                             );
                         }
                     );
-                    if (duplicate === undefined) newFavoriteList.push(favoriteItem);
+                    if (duplicate === undefined) newNodes.push(node);
                 }
-                if (favoriteList.length >= limit) newFavoriteList.pop(); //is this necessary?
-                this.setBTGArray(name, newFavoriteList, libInfo);
+                if (
+                    limit !== undefined &&
+                    limit !== null &&
+                    limit > 0 &&
+                    nodes.length >= limit
+                )
+                    newNodes.pop();
+                this.setBTGArray(BTGType, newNodes, libInfo);
             });
             resolve(false);
         });
     }
 
     /**
-     * Add an item to the list of favorited items associated with the application.  Note that it only stores the last 50 sorted by date
-     * @param item Item to add to the insert list
+     * Remove an item to the list of magicType associated with the application.
+     * @param item Item to remove from the magicType list
      */
-    public addLibrary(
+    public removeMagicNode(
         item: BTGlobalTreeNodeMagicDataInfo,
-        limit: number = 50,
-        name: string = 'libraries',
+        magicType: string,
         libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
     ): Promise<boolean> {
         return new Promise((resolve, _reject) => {
-            console.log(item);
-            this.getAllLibraries().then((libraryList: BTGlobalTreeNodeInfo[]) => {
-                const newLibraryList: BTGlobalTreeNodeInfo[] = [];
-                let libraryItem: BTGlobalTreeNodeMagicDataInfo;
-                let duplicate: BTGlobalTreeNodeMagicDataInfo;
-                //Iterate favoriteList and don't add duplicates to new list
-                libraryList.unshift(item);
-                for (let i in libraryList) {
-                    libraryItem = libraryList[i];
-                    duplicate = newLibraryList.find(
-                        (element: BTGlobalTreeNodeMagicDataInfo) => {
-                            return (
-                                element.id === libraryItem.id &&
-                                element.configuration === libraryItem.configuration
-                            );
-                        }
-                    );
-                    if (duplicate === undefined) newLibraryList.push(libraryItem);
-                }
-                if (libraryList.length >= limit) newLibraryList.pop(); //is this necessary?
-                this.setBTGArray(name, newLibraryList, libInfo);
-            });
-            resolve(false);
-        });
-    }
-
-    /**
-     * Remove an item to the list of favorited items associated with the application.  Note that it only stores the last 50 sorted by date
-     * @param item Item to add to the insert list
-     */
-    public removeFavorited(
-        item: BTGlobalTreeNodeMagicDataInfo,
-        limit: number = 50,
-        name: string = 'favorited',
-        libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
-    ): Promise<boolean> {
-        return new Promise((resolve, _reject) => {
-            console.log(item);
-            this.getAllFavorited().then((favoriteList: BTGlobalTreeNodeInfo[]) => {
-                const newFavoriteList: BTGlobalTreeNodeInfo[] = [];
-                let favoriteItem: BTGlobalTreeNodeMagicDataInfo;
+            const BTGType = this.magicTypeToBTGType[magicType];
+            this.getAllOfMagicType(magicType,libInfo).then((nodes: BTGlobalTreeNodeInfo[]) => {
+                const newNodes: BTGlobalTreeNodeInfo[] = [];
+                let node: BTGlobalTreeNodeMagicDataInfo;
                 //iterate over favorites list and add all the items that aren't like item
-                for (let i in favoriteList) {
-                    favoriteItem = favoriteList[i];
+                for (let i in nodes) {
+                    node = nodes[i];
                     if (
-                        favoriteItem.id !== item.id ||
-                        favoriteItem.configuration !== item.configuration
+                        node.id !== item.id ||
+                        node.configuration !== item.configuration
                     ) {
-                        newFavoriteList.push(favoriteItem);
+                        newNodes.push(node);
                     }
                 }
-                this.setBTGArray(name, newFavoriteList, libInfo);
+                this.setBTGArray(BTGType, newNodes, libInfo);
             });
             resolve(false);
         });
-    }
-    /**
-     * Remove an item to the list of favorited items associated with the application.  Note that it only stores the last 50 sorted by date
-     * @param item Item to add to the insert list
-     */
-    public removeLibrary(
-        item: BTGlobalTreeNodeMagicDataInfo,
-        limit: number = 50,
-        name: string = 'libraries',
-        libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
-    ): Promise<boolean> {
-        return new Promise((resolve, _reject) => {
-            console.log(item);
-            this.getAllLibraries().then((libraryList: BTGlobalTreeNodeInfo[]) => {
-                const newLibraryList: BTGlobalTreeNodeInfo[] = [];
-                let libraryItem: BTGlobalTreeNodeMagicDataInfo;
-                //iterate over favorites list and add all the items that aren't like item
-                for (let i in libraryList) {
-                    libraryItem = libraryList[i];
-                    if (
-                        libraryItem.id !== item.id ||
-                        libraryItem.configuration !== item.configuration
-                    ) {
-                        newLibraryList.push(libraryItem);
-                    }
-                }
-                this.setBTGArray(name, newLibraryList, libInfo);
-            });
-            resolve(false);
-        });
-    }
-    /**
-     * Add an item to the list of recently inserted items associated with the application.  Note that it only stores the last 50 sorted by date
-     * @param item Item to add to the insert list
-     */
-    public addRecentlyInserted(
-        item: BTGlobalTreeNodeInfo,
-        limit: number = 50,
-        name: string = 'recent',
-        libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
-    ): Promise<boolean> {
-        return new Promise((resolve, _reject) => {
-            console.log(item);
-            this.getAllRecentlyInserted().then((recentList: BTGlobalTreeNodeInfo[]) => {
-                const newRecentList: BTGlobalTreeNodeInfo[] = [];
-                let recentItem: BTGlobalTreeNodeMagicDataInfo;
-                let duplicate: BTGlobalTreeNodeMagicDataInfo;
-                //Iterate recentList and don't add duplicates to new list
-                recentList.unshift(item);
-                for (let i in recentList) {
-                    recentItem = recentList[i];
-                    duplicate = newRecentList.find(
-                        (element: BTGlobalTreeNodeMagicDataInfo) => {
-                            return (
-                                element.id === recentItem.id &&
-                                element.configuration === recentItem.configuration
-                            ); //needs configurable check as well
-                        }
-                    );
-                    if (duplicate === undefined) newRecentList.push(recentItem);
-                }
-                if (recentList.length >= limit) newRecentList.pop();
-                this.setBTGArray(name, newRecentList, libInfo);
-            });
-            resolve(false);
-        });
-    }
-    public getAllLibraries(
-        libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
-    ): Promise<Array<BTGlobalTreeNodeInfo>> {
-        return this.getBTGArray('libraries', libInfo);
     }
 
-    public getAllFavorited(
+    public getAllOfMagicType(
+        magicType: string,
         libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
     ): Promise<Array<BTGlobalTreeNodeInfo>> {
-        return this.getBTGArray('favorited', libInfo);
+        let BTType = this.magicTypeToBTGType[magicType];
+        if (BTType === undefined || BTType === null)
+            console.error(magicType + ' is not a valid magicType');
+        return this.getBTGArray(BTType, libInfo);
     }
+
     /**
-     *  Last 50 entries sent to addRecentlyInserted sorted by date.
+     *  Get a magictype by index.
      * @returns
      */
-    public getAllRecentlyInserted(
+    public getMagicTypeByIndex(
+        index: number,
+        magicType: string,
+        refreshNodeResults?: boolean,
         libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
     ): Promise<Array<BTGlobalTreeNodeInfo>> {
-        return this.getBTGArray('recent', libInfo);
+        return new Promise(async (resolve, reject) => {
+            if (refreshNodeResults === true) {
+                const result = await this.getAllOfMagicType(magicType, libInfo);
+                if (result === undefined || result.length === 0) {
+                    this.magicNodes[magicType] = [];
+                    resolve(undefined);
+                }
+                this.magicNodes[magicType] = result;
+            }
+            const currentNodes = this.magicNodes[magicType];
+            if (index >= currentNodes.length) {
+                resolve(undefined);
+            }
+            resolve([currentNodes[index]]);
+        });
     }
-    recentlyInsertedNodes: BTGlobalTreeNodeInfo[];
     /**
      *  Get a recently inserted item by index.
      * @returns
      */
-    public getRecentlyInsertedByIndex(
-        index: number,
-        refreshNodeResults?: boolean,
-        libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
-    ): Promise<Array<BTGlobalTreeNodeInfo>> {
-        return new Promise(async (resolve, reject) => {
-            if (refreshNodeResults === true) {
-                const result = await this.getAllRecentlyInserted(libInfo);
-                if (result === undefined || result.length === 0) {
-                    this.recentlyInsertedNodes = [];
-                    resolve(undefined);
-                }
-                this.recentlyInsertedNodes = result;
-            }
-            const currentNodes = this.recentlyInsertedNodes;
-            if (index >= currentNodes.length) {
-                resolve(undefined);
-            }
-            resolve([currentNodes[index]]);
-        });
-    }
+    // public getRecentlyInsertedByIndex(
+    //     index: number,
+    //     refreshNodeResults?: boolean,
+    //     libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
+    // ): Promise<Array<BTGlobalTreeNodeInfo>> {
+    //     return new Promise(async (resolve, reject) => {
+    //         if (refreshNodeResults === true) {
+    //             const result = await this.getAllRecentlyInserted(libInfo);
+    //             if (result === undefined || result.length === 0) {
+    //                 this.magicNodes.recentlyInserted = [];
+    //                 resolve(undefined);
+    //             }
+    //             this.magicNodes.recentlyInserted = result;
+    //         }
+    //         const currentNodes = this.magicNodes.recentlyInserted;
+    //         if (index >= currentNodes.length) {
+    //             resolve(undefined);
+    //         }
+    //         resolve([currentNodes[index]]);
+    //     });
+    // }
 
-    favoritedNodes: BTGlobalTreeNodeInfo[];
+    // public getFavoritedByIndex(
+    //     index: number,
+    //     refreshNodeResults?: boolean,
+    //     libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
+    // ): Promise<Array<BTGlobalTreeNodeInfo>> {
+    //     return new Promise(async (resolve, reject) => {
+    //         if (refreshNodeResults === true) {
+    //             const result = await this.getAllFavorited(libInfo);
+    //             if (result === undefined || result.length === 0) {
+    //                 this.magicNodes.favorited = [];
+    //                 resolve(undefined);
+    //             }
+    //             this.magicNodes.favorited = result;
+    //         }
+    //         const currentNodes = this.magicNodes.favorited;
+    //         if (index >= currentNodes.length) {
+    //             resolve(undefined);
+    //         }
+    //         resolve([currentNodes[index]]);
+    //     });
+    // }
 
-    public getFavoritedByIndex(
-        index: number,
-        refreshNodeResults?: boolean,
-        libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
-    ): Promise<Array<BTGlobalTreeNodeInfo>> {
-        return new Promise(async (resolve, reject) => {
-            if (refreshNodeResults === true) {
-                const result = await this.getAllFavorited(libInfo);
-                if (result === undefined || result.length === 0) {
-                    this.favoritedNodes = [];
-                    resolve(undefined);
-                }
-                this.favoritedNodes = result;
-            }
-            const currentNodes = this.favoritedNodes;
-            if (index >= currentNodes.length) {
-                resolve(undefined);
-            }
-            resolve([currentNodes[index]]);
-        });
-    }
-
-    libraryNodes: BTGlobalTreeNodeInfo[];
-
-    public getLibraryByIndex(
-        index: number,
-        refreshNodeResults?: boolean,
-        libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
-    ): Promise<Array<BTGlobalTreeNodeInfo>> {
-        return new Promise(async (resolve, reject) => {
-            if (refreshNodeResults === true) {
-                const result = await this.getAllLibraries(libInfo);
-                if (result === undefined || result.length === 0) {
-                    this.libraryNodes = [];
-                    resolve(undefined);
-                }
-                this.libraryNodes = result;
-            }
-            const currentNodes = this.libraryNodes;
-            if (index >= currentNodes.length) {
-                resolve(undefined);
-            }
-            resolve([currentNodes[index]]);
-        });
-    }
+    // public getLibraryByIndex(
+    //     index: number,
+    //     refreshNodeResults?: boolean,
+    //     libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
+    // ): Promise<Array<BTGlobalTreeNodeInfo>> {
+    //     return new Promise(async (resolve, reject) => {
+    //         if (refreshNodeResults === true) {
+    //             const result = await this.getAllLibraries(libInfo);
+    //             if (result === undefined || result.length === 0) {
+    //                 this.magicNodes.library = [];
+    //                 resolve(undefined);
+    //             }
+    //             this.magicNodes.library = result;
+    //         }
+    //         const currentNodes = this.magicNodes.library;
+    //         if (index >= currentNodes.length) {
+    //             resolve(undefined);
+    //         }
+    //         resolve([currentNodes[index]]);
+    //     });
+    // }
 
     /**
      * @param array Array to save - Array of BTGlobalTreeNodeInfo representing the full path to the location
@@ -525,9 +455,9 @@ export class Preferences {
             this.getAppJson(libInfo)
                 .then((res) => {
                     res[pref_name] = array;
-                    this.onshape.blobElementApi.uploadFileUpdateElement(
-                        {
-                            encodedFilename: res["appName"],
+                    this.onshape.blobElementApi
+                        .uploadFileUpdateElement({
+                            encodedFilename: res['appName'],
                             did: libInfo.id,
                             wid: libInfo.wvmid,
                             eid: libInfo.elementId,
@@ -569,11 +499,11 @@ export class Preferences {
                 .then((res) => {
                     if (Array.isArray(pref_name)) {
                         const pref_names = pref_name;
-                            let allResults: {
-                                [pref_name: string]: Array<BTGlobalTreeNodeInfo>;
-                            } = {};
-                            for (let pref_name of pref_names) {
-                                allResults[pref_name] = [];
+                        let allResults: {
+                            [pref_name: string]: Array<BTGlobalTreeNodeInfo>;
+                        } = {};
+                        for (let pref_name of pref_names) {
+                            allResults[pref_name] = [];
                             for (let btg_json of res[pref_name]) {
                                 allResults[pref_name].push(
                                     BTGlobalTreeNodeMagicDataInfoJSONTyped(
@@ -609,7 +539,8 @@ export class Preferences {
      */
     public getAppJson(libInfo: BTGlobalTreeProxyInfo): Promise<JSON> {
         return new Promise((resolve, _reject) => {
-            this.onshape.blobElementApi.downloadFileWorkspace({
+            this.onshape.blobElementApi
+                .downloadFileWorkspace({
                     did: libInfo.id,
                     eid: libInfo.elementId,
                     wid: libInfo.wvmid,
@@ -654,7 +585,7 @@ export class Preferences {
         return new Promise((resolve, reject) => {
             let elem_found: Boolean = false;
             for (let element of elements) {
-                if (element.name === appName && element.type === "Blob") {
+                if (element.name === appName && element.type === 'Blob') {
                     libInfo.elementId = element.id;
                     resolve(libInfo);
                     elem_found = true;
@@ -662,20 +593,20 @@ export class Preferences {
             }
 
             if (!elem_found) {
-                const str = JSON.stringify({ "appName": appName});
+                const str = JSON.stringify({ appName: appName });
 
-                this.onshape.blobElementApi.uploadFileCreateElement(
-                        {
-                            encodedFilename: appName,
-                            did: libInfo.id,
-                            wid: libInfo.wvmid,
+                this.onshape.blobElementApi
+                    .uploadFileCreateElement({
+                        encodedFilename: appName,
+                        did: libInfo.id,
+                        wid: libInfo.wvmid,
 
-                            // HACK The API expects a Blob type, however if you pass it a blob it formats
-                            // and POSTs it as a binary file no matter what. This needs to be passed as a string for
-                            // the needs of the Preferences API.
-                            file: str as unknown as Blob,
-                            storeInDocument: true,
-                        })
+                        // HACK The API expects a Blob type, however if you pass it a blob it formats
+                        // and POSTs it as a binary file no matter what. This needs to be passed as a string for
+                        // the needs of the Preferences API.
+                        file: str as unknown as Blob,
+                        storeInDocument: true,
+                    })
                     .then((res) => {
                         libInfo.elementId = res.id;
                         console.log('Created new app element since it did not exist.');
