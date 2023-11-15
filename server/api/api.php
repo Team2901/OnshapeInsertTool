@@ -131,6 +131,7 @@ $err = curl_error($ch);
 // Dump out the headers so we can confirm what we asked for
 $headers = curl_getinfo($ch, CURLINFO_HEADER_OUT);
 oalog("HEADERS:\n".$headers."\n");
+oalog("TIME:\n".date("h:i:sa"));
 
 // Log what we got back
 $limit = strlen($response);

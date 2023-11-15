@@ -1,4 +1,4 @@
 <?php
   $logfilename = "api.log";
-  $enable_log = false;
+  $enable_log = true;
 ?>

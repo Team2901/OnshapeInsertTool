@@ -31,9 +31,11 @@
 import { exists } from 'onshape-typescript-fetch/runtime';
 import { OnshapeAPI } from './onshapeapi';
 import {
+    BTDocumentElementInfo,
     BTGlobalTreeNodeInfo,
     BTGlobalTreeNodeInfoFromJSONTyped,
     GetAssociativeDataWvmEnum,
+    GetElementsInDocumentRequest,
     UploadFileCreateElementRequest,
 } from 'onshape-typescript-fetch';
 import { magicIconInfo } from './app';
@@ -318,21 +320,23 @@ export class Preferences {
     ): Promise<boolean> {
         return new Promise((resolve, _reject) => {
             const BTGType = this.magicTypeToBTGType[magicType];
-            this.getAllOfMagicType(magicType,libInfo).then((nodes: BTGlobalTreeNodeInfo[]) => {
-                const newNodes: BTGlobalTreeNodeInfo[] = [];
-                let node: BTGlobalTreeNodeMagicDataInfo;
-                //iterate over favorites list and add all the items that aren't like item
-                for (let i in nodes) {
-                    node = nodes[i];
-                    if (
-                        node.id !== item.id ||
-                        node.configuration !== item.configuration
-                    ) {
-                        newNodes.push(node);
+            this.getAllOfMagicType(magicType, libInfo).then(
+                (nodes: BTGlobalTreeNodeInfo[]) => {
+                    const newNodes: BTGlobalTreeNodeInfo[] = [];
+                    let node: BTGlobalTreeNodeMagicDataInfo;
+                    //iterate over favorites list and add all the items that aren't like item
+                    for (let i in nodes) {
+                        node = nodes[i];
+                        if (
+                            node.id !== item.id ||
+                            node.configuration !== item.configuration
+                        ) {
+                            newNodes.push(node);
+                        }
                     }
+                    this.setBTGArray(BTGType, newNodes, libInfo);
                 }
-                this.setBTGArray(BTGType, newNodes, libInfo);
-            });
+            );
             resolve(false);
         });
     }
@@ -503,7 +507,7 @@ export class Preferences {
                             [pref_name: string]: Array<BTGlobalTreeNodeInfo>;
                         } = {};
                         for (let pref_name of pref_names) {
-                            allResults[pref_name] = res[pref_name];
+                            allResults[pref_name] = res[pref_name] || [];
                             // for (let btg_json of res[pref_name]) {
                             //     allResults[pref_name].push(
                             //         BTGlobalTreeNodeMagicDataInfoJSONTyped(
@@ -515,8 +519,7 @@ export class Preferences {
                         }
                         resolve(allResults);
                     } else {
-                        const result: Array<BTGlobalTreeNodeInfo> = res[pref_name];
-                        pref_name = pref_name as string;
+                        const result: Array<BTGlobalTreeNodeInfo> = res[pref_name] || [];
                         // for (let btg_json of res[pref_name]) {
                         //     result.push(
                         //         BTGlobalTreeNodeMagicDataInfoJSONTyped(btg_json, false)
@@ -555,11 +558,36 @@ export class Preferences {
         });
     }
 
+    //simple element caching, needs update when element is created
+    private cachedElementsInDocument: { [did: string]: BTDocumentElementInfo[] } = {};
+
+    private getElementsInDocument(
+        requestParameters: GetElementsInDocumentRequest
+    ): Promise<Array<BTDocumentElementInfo>> {
+        return new Promise((resolve, reject) => {
+            if (this.cachedElementsInDocument[requestParameters.did]) {
+                resolve(this.cachedElementsInDocument[requestParameters.did]);
+            } else {
+                this.onshape.documentApi
+                    .getElementsInDocument(requestParameters)
+                    .then((res) => {
+                        this.cachedElementsInDocument[requestParameters.did] = res;
+                        resolve(res);
+                    });
+            }
+        });
+    }
+
     public getAppElement(
         appName: string,
         libInfo: BTGlobalTreeProxyInfo
     ): Promise<BTGlobalTreeProxyInfo> {
         return new Promise((resolve, reject) => {
+            // this.getElementsInDocument({
+            //     did: libInfo.id,
+            //     wvm: 'w',
+            //     wvmid: libInfo.wvmid,
+            // })
             this.onshape.documentApi
                 .getElementsInDocument({
                     did: libInfo.id,
@@ -573,6 +601,8 @@ export class Preferences {
                 })
                 .catch((err) => {
                     console.log(err);
+                    console.log('STUFF THAT ERRORS', appName);
+                    reject(err);
                 });
         });
     }
@@ -584,6 +614,7 @@ export class Preferences {
     ): Promise<BTGlobalTreeProxyInfo> {
         return new Promise((resolve, reject) => {
             let elem_found: Boolean = false;
+            // console.log(elements.length);
             for (let element of elements) {
                 if (element.name === appName && element.type === 'Blob') {
                     libInfo.elementId = element.id;
@@ -609,6 +640,7 @@ export class Preferences {
                     })
                     .then((res) => {
                         libInfo.elementId = res.id;
+                        this.cachedElementsInDocument = {}; //delete cache so next next it will be update
                         console.log('Created new app element since it did not exist.');
                         resolve(libInfo);
                     })

@@ -463,7 +463,7 @@ export class OnshapeAPI {
         }
         console.log(item, 'for image thumbnail creation');
         let imageURL = `${this.myserver}/api/thumbnails/d/${item.id}`;
-        if (item['elementType'] === 'PARTSTUDIO') {
+        if (item['elementType'] === 'PARTSTUDIO' && item.defaultWorkspace !== undefined) {
             imageURL += `/w/${item.defaultWorkspace.id}`;
             imageURL += `/e/${item['elementId']}`;
         } else {

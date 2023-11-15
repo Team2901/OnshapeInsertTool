@@ -347,7 +347,7 @@ export class App extends BaseApp {
             parentType: ['LI'], //any?
             documentType: ['proxy-library'],
             userOwned: true,
-            name: 'scandelta',
+            name: 'scanproxylibrarydelta',
             label: 'Scan library for changes',
         },
     };
@@ -1663,11 +1663,28 @@ export class App extends BaseApp {
                     case 'CLONEFOLDER': {
                         optionElement.onclick = () => {
                             this.libraries
-                                .createLibraryFromFolder(item)
+                                .createLibraryFromFolder2(item)
                                 .then((library) => {
                                     this.preferences.addMagicNode(library, 'library');
                                     this.hideActionMenu();
                                 });
+                        };
+                        break;
+                    }
+                    case 'BUILDDESC':
+                        {
+                            optionElement.onclick = () => {
+                                this.libraries.refactorProxyLibrary2(item).then(() => {
+                                    console.log('refactoring done');
+                                    this.hideActionMenu();
+                                });
+                            };
+                        }
+                        break;
+                    case 'SCANDELTA': {
+                        optionElement.onclick = () => {
+                            //show change menu prompt,
+                            //set delta info in prompt
                         };
                         break;
                     }
@@ -1890,6 +1907,45 @@ export class App extends BaseApp {
      * @param elementId Specific element ID
      * @returns Array of BTDocumentElementInfo
      */
+
+    public showChangeMenu(library: BTGlobalTreeNodeInfo) {
+      this.libraries.scanLibraryDelta(library);
+    }
+
+    public createChangeMenu(parent: HTMLElement): void {
+        const changeMenuMainDiv = createDocumentElement('div', {
+            id: 'docchangemenu',
+            class: 'popover popup bs-popover-bottom',
+            style: 'border:none;display:none;',
+        });
+        let changeMenuDiv = createDocumentElement('div', {
+            class: 'context-menu-list contextmenu-list list-has-icons context-menu-root',
+        });
+
+        const closeChangeMenu = createDocumentElement('li', {
+            id: 'docactionmenu_close',
+            class: 'context-menu-item',
+            style: 'position:absolute;right:0px;top:0px;padding-right:3px;z-index:1;',
+            textContent: '🞬',
+        });
+        closeChangeMenu.onclick = () => {
+            this.hideActionMenu();
+        };
+        changeMenuDiv.appendChild(closeChangeMenu);
+
+        const noOptionsList = createDocumentElement('li', {
+            id: 'docactionmenu_no-options',
+            class: 'context-menu-item',
+            textContent: 'No available options  ',
+        });
+        changeMenuDiv.appendChild(noOptionsList);
+
+        changeMenuMainDiv.appendChild(changeMenuDiv);
+
+        parent.appendChild(changeMenuMainDiv);
+        this.hideActionMenu();
+    }
+
     public getDocumentElementInfo(
         documentId: string,
         workspaceId: string,
