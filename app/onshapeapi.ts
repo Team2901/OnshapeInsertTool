@@ -461,7 +461,7 @@ export class OnshapeAPI {
         ) {
             verPart = `/v/${item.recentVersion.id}`;
         }
-        console.log(item, 'for image thumbnail creation');
+        // console.log(item, 'for image thumbnail creation');
         let imageURL = `${this.myserver}/api/thumbnails/d/${item.id}`;
         if (item['elementType'] === 'PARTSTUDIO' && item.defaultWorkspace !== undefined) {
             imageURL += `/w/${item.defaultWorkspace.id}`;

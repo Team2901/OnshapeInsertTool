@@ -241,7 +241,7 @@ export class Preferences {
         location: Array<BTGlobalTreeNodeInfo>,
         libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
     ): Promise<boolean> {
-        return this.setBTGArray('last_known_location', location, libInfo);
+        return this.setBTGArray(libInfo, 'last_known_location', location);
     }
 
     /**
@@ -253,7 +253,7 @@ export class Preferences {
         items: Array<BTGlobalTreeNodeInfo>,
         libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
     ): Promise<boolean> {
-        return this.setBTGArray('home', items, libInfo);
+        return this.setBTGArray(libInfo, 'home', items);
     }
 
     /**
@@ -303,7 +303,7 @@ export class Preferences {
                     nodes.length >= limit
                 )
                     newNodes.pop();
-                this.setBTGArray(BTGType, newNodes, libInfo);
+                this.setBTGArray(libInfo, BTGType, newNodes);
             });
             resolve(false);
         });
@@ -334,7 +334,7 @@ export class Preferences {
                             newNodes.push(node);
                         }
                     }
-                    this.setBTGArray(BTGType, newNodes, libInfo);
+                    this.setBTGArray(libInfo, BTGType, newNodes);
                 }
             );
             resolve(false);
@@ -446,19 +446,50 @@ export class Preferences {
     //         resolve([currentNodes[index]]);
     //     });
     // }
-
     /**
+     * 
+     * @param libInfo library object with element id to save to
+     * @param info object with {pref_name: array} for multiple entries
+     */
+    public setBTGArray(
+        libInfo: BTGlobalTreeProxyInfo,
+        info: { [pref_name: string]: BTGlobalTreeNodeInfo[] }
+    ): Promise<boolean>;
+    /**
+     * 
+     * @param libInfo library object with element id to save to
+     * @param pref_name  key to save the array under
      * @param array Array to save - Array of BTGlobalTreeNodeInfo representing the full path to the location
      */
     public setBTGArray(
+        libInfo: BTGlobalTreeProxyInfo,
         pref_name: string,
-        array: Array<BTGlobalTreeNodeInfo>,
-        libInfo: BTGlobalTreeProxyInfo
+        array: BTGlobalTreeNodeInfo[]
+    ): Promise<boolean>;
+    /**
+     * @param libInfo library object with element id to save to
+     * @param param2 key or info
+     * @param param3 array or undefined
+     */
+    public setBTGArray(
+        libInfo: BTGlobalTreeProxyInfo,
+        param2: string | { [pref_name: string]: Array<BTGlobalTreeNodeInfo> },
+        param3?: Array<BTGlobalTreeNodeInfo>
     ): Promise<boolean> {
+        let info: { [pref_name: string]: Array<BTGlobalTreeNodeInfo> } = {};
+        if (typeof param2 === 'string') {
+            //param2 is 
+            info[param2] = param3;
+        } else {
+            info = param2;
+        }
         return new Promise((resolve, _reject) => {
             this.getAppJson(libInfo)
                 .then((res) => {
-                    res[pref_name] = array;
+                    let pref_name: string;
+                    for (pref_name in info) {
+                        res[pref_name] = info[pref_name];
+                    }
                     this.onshape.blobElementApi
                         .uploadFileUpdateElement({
                             encodedFilename: res['appName'],
@@ -583,25 +614,29 @@ export class Preferences {
         libInfo: BTGlobalTreeProxyInfo
     ): Promise<BTGlobalTreeProxyInfo> {
         return new Promise((resolve, reject) => {
-            // this.getElementsInDocument({
-            //     did: libInfo.id,
-            //     wvm: 'w',
-            //     wvmid: libInfo.wvmid,
-            // })
-            this.onshape.documentApi
-                .getElementsInDocument({
-                    did: libInfo.id,
-                    wvm: 'w',
-                    wvmid: libInfo.wvmid,
-                })
+            this.getElementsInDocument({
+                did: libInfo.id,
+                wvm: 'w',
+                wvmid: libInfo.wvmid,
+            })
+                // this.onshape.documentApi
+                //     .getElementsInDocument({
+                //         did: libInfo.id,
+                //         wvm: 'w',
+                //         wvmid: libInfo.wvmid,
+                //     })
                 .then((res) => {
-                    this.processAppElements(appName, res, libInfo).then((res) => {
-                        resolve(res);
-                    });
+                    this.processAppElements(appName, res, libInfo)
+                        .then((res) => {
+                            resolve(res);
+                        })
+                        .catch((err) => {
+                            reject(err);
+                        });
                 })
                 .catch((err) => {
                     console.log(err);
-                    console.log('STUFF THAT ERRORS', appName);
+                    // console.log('STUFF THAT ERRORS', appName);
                     reject(err);
                 });
         });
@@ -641,7 +676,7 @@ export class Preferences {
                     .then((res) => {
                         libInfo.elementId = res.id;
                         this.cachedElementsInDocument = {}; //delete cache so next next it will be update
-                        console.log('Created new app element since it did not exist.');
+                        // console.log(/*'Created new app element since it did not exist.: ' +*/ appName);
                         resolve(libInfo);
                     })
                     .catch((err) => {

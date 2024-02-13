@@ -70,10 +70,16 @@ import {
 } from './preferences';
 import { Library } from './libraries';
 import { appName as APP_NAME } from './app_settings.json';
+import { InformationReporter } from './InformationReporter';
 export interface magicIconInfo {
     label: string;
     icon: OnshapeSVGIcon;
     hideFromMenu?: boolean;
+}
+
+export interface homeGroupInfo {
+    title: string;
+    children: string[];
 }
 
 export interface configInfo {
@@ -182,6 +188,11 @@ export class App extends BaseApp {
         LI: { icon: 'svg-icon-libraries', label: 'My Libraries' },
         GL: { icon: 'svg-icon-library-public', label: 'Global Libraries' },
     };
+    public homeGrouping: homeGroupInfo[] = [
+        { title: '', children: ['LI', 'FV', 'RI', 'GL', '11'] },
+        { title: '━━━━━━━━', children: ['1', '0', '2', '12', '3'] },
+        { title: 'Other', children: ['5', '6', '7', '8', '9', '14'] },
+    ];
     public actionMenuOptions: { [item: string]: actionMenuOptionInfo } = {
         NAME: {
             parentType: ['any'],
@@ -197,13 +208,13 @@ export class App extends BaseApp {
             parentWithoutDocument: ['proxy-folder', 'proxy-library', 'LI'],
             label: 'Name',
         },
-        REHOME: {
-            parentType: ['home'],
-            documentType: ['magic'],
-            name: 'removehome',
-            label: 'Remove from home (not implemented)',
-            deleteIcon: true,
-        },
+        // REHOME: {
+        //     parentType: ['home'],
+        //     documentType: ['magic'],
+        //     name: 'removehome',
+        //     label: 'Remove from home (not implemented)',
+        //     deleteIcon: true,
+        // },
         REPORT: {
             parentType: ['any'],
             documentType: ['document-summary', 'document-summary-config'],
@@ -434,7 +445,7 @@ export class App extends BaseApp {
      * @param location Location to
      */
     public saveLastLocation(location: folderLocation): void {
-        console.log(location, '______');
+        // console.log(location, '______');
         this.preferences.setLastKnownLocation(location.pathToRoot);
     }
     /**
@@ -496,7 +507,7 @@ export class App extends BaseApp {
         breadcrumbs: BTGlobalTreeNodeInfo[],
         teamroot?: BTGlobalTreeNodeInfo
     ): void {
-        console.log(breadcrumbs);
+        // console.log(breadcrumbs);
         this.saveLastLocation({
             pathToRoot: breadcrumbs,
             teamroot: teamroot,
@@ -743,6 +754,40 @@ export class App extends BaseApp {
         return div;
     }
     /**
+     *
+     */
+    private processHomeNode(magicid: string, table: JTTable) {
+        const magicinfo = this.magicInfo[magicid];
+        if (!magicinfo.hideFromMenu) {
+            const magicNode: BTGlobalTreeNodeInfo = {
+                jsonType: 'magic',
+                id: magicid,
+            };
+            const row = table.addBodyRow();
+            const span = createDocumentElement('span');
+            const icon = createSVGIcon(magicinfo.icon, 'documents-filter-icon');
+            const onclick = () => {
+                this.gotoFolder(magicNode);
+            };
+            const oncontextmenu = (event) => {
+                event.preventDefault();
+                let rect = textspan.getBoundingClientRect();
+                this.showActionMenu(magicNode, { id: 'home', jsonType: 'magic' }, rect);
+                this.hidePopup();
+            };
+            icon.onclick = onclick;
+            icon.oncontextmenu = oncontextmenu;
+            span.appendChild(icon);
+            const textspan = createDocumentElement('span', {
+                textContent: magicinfo.label,
+            });
+            span.onclick = onclick;
+            span.oncontextmenu = oncontextmenu;
+            span.appendChild(textspan);
+            row.add(span);
+        }
+    }
+    /**
      * Show all of the selectable items on the home menu
      * @param elem DOM Element to put information into
      */
@@ -750,39 +795,15 @@ export class App extends BaseApp {
         const table = new JTTable({
             class: 'os-document-filter-table full-width',
         });
-        for (const magicid in this.magicInfo) {
-            const magicinfo = this.magicInfo[magicid];
-            if (!magicinfo.hideFromMenu) {
-                const magicNode: BTGlobalTreeNodeInfo = {
-                    jsonType: 'magic',
-                    id: magicid,
-                };
-                const row = table.addBodyRow();
-                const span = createDocumentElement('span');
-                const icon = createSVGIcon(magicinfo.icon, 'documents-filter-icon');
-                const onclick = () => {
-                    this.gotoFolder(magicNode);
-                };
-                const oncontextmenu = (event) => {
-                    event.preventDefault();
-                    let rect = textspan.getBoundingClientRect();
-                    this.showActionMenu(
-                        magicNode,
-                        { id: 'home', jsonType: 'magic' },
-                        rect
-                    );
-                    this.hidePopup();
-                };
-                icon.onclick = onclick;
-                icon.oncontextmenu = oncontextmenu;
-                span.appendChild(icon);
-                const textspan = createDocumentElement('span', {
-                    textContent: magicinfo.label,
-                });
-                textspan.onclick = onclick;
-                textspan.oncontextmenu = oncontextmenu;
-                span.appendChild(textspan);
-                row.add(span);
+        for (const group of this.homeGrouping) {
+            const row = table.addBodyRow();
+            const span = createDocumentElement('span', {
+                textContent: group.title,
+                style: "font-weight: bold;font-size: larger;font-style: italic; letter-spacing: -1px;"
+            });
+            row.add(span);
+            for (const magicid of group.children) {
+                this.processHomeNode(magicid, table);
             }
         }
         elem.appendChild(table.generate());
@@ -816,7 +837,7 @@ export class App extends BaseApp {
             this.hidePopup();
         };
         items.map((item) => {
-            console.log('appending elements: item', item);
+            // console.log('appending elements: item', item);
             const itemInfo = item as BTDocumentSummaryInfo;
             // Have we hit the limit?  If so then just skip out
             if (this.loaded >= this.loadedlimit) {
@@ -832,6 +853,7 @@ export class App extends BaseApp {
             ////
             const libraryName = this.libraries.decodeLibraryName(item.name);
             if (libraryName !== undefined) {
+                if(item.name.indexOf("︴raw") != -1)return;
                 item.jsonType = 'proxy-library'; //just make sure
                 item.isContainer = true; //also to make sure
                 item.name = libraryName; //so it renders correctly
@@ -1322,6 +1344,21 @@ export class App extends BaseApp {
                     }
                     case 'CLONELIB': {
                         optionElement.onclick = () => {
+                            const infoTextId = '';
+                            const inforep = new InformationReporter<{
+                                pfolders: number;
+                                tfolders: number;
+                            }>(
+                                { pfolders: 0, tfolders: 0 },
+                                (info: { pfolders: number; tfolders: number }) => {
+                                    this.setElemText(
+                                        infoTextId,
+                                        `
+                                ${info.pfolders} folders proccessed of ${info.tfolders} discovered
+                              `
+                                    );
+                                }
+                            );
                             this.libraries.cloneProxyLibrary(item).then((library) => {
                                 this.hideActionMenu();
                             });
@@ -1662,11 +1699,36 @@ export class App extends BaseApp {
                     }
                     case 'CLONEFOLDER': {
                         optionElement.onclick = () => {
+                            this.setInProgress();
+                            const infoTextElement = createDocumentElement('span', {
+                                class: 'context-menu-item',
+                                style: 'padding:0px;',
+                            });
+                            optionElement.appendChild(infoTextElement);
+                            let infoRep: any;
+                            infoRep = new InformationReporter<{
+                                pfolders: number;
+                                tfolders: number;
+                                status: string;
+                            }>(
+                                { pfolders: 0, tfolders: 0, status: "" },
+                                (info: { pfolders: number; tfolders: number; status: string; }) => {
+                                    if(info.status == "Copy files"){
+                                      infoTextElement.innerText = `
+                                    🞄 ${info.pfolders}/${info.tfolders} folders processed
+                              `; //${info.pfolders} folders proccessed of ${info.tfolders} discovered
+                                    }else{
+                                      infoTextElement.innerText = "\n  " + info.status;
+                                    }
+                                }
+                            );
                             this.libraries
-                                .createLibraryFromFolder2(item)
+                                .createLibraryFromFolder(item, infoRep)
                                 .then((library) => {
+                                    optionElement.removeChild(infoTextElement);
                                     this.preferences.addMagicNode(library, 'library');
                                     this.hideActionMenu();
+                                    this.setInProgress(false);
                                 });
                         };
                         break;
@@ -1674,7 +1736,7 @@ export class App extends BaseApp {
                     case 'BUILDDESC':
                         {
                             optionElement.onclick = () => {
-                                this.libraries.refactorProxyLibrary2(item).then(() => {
+                                this.libraries.refactorProxyLibrary(item).then(() => {
                                     console.log('refactoring done');
                                     this.hideActionMenu();
                                 });
@@ -1683,6 +1745,11 @@ export class App extends BaseApp {
                         break;
                     case 'SCANDELTA': {
                         optionElement.onclick = () => {
+                          this.libraries.scanLibraryDelta(item).then((deltaLibrary:BTGlobalTreeNodeInfo)=>{
+
+                            this.preferences.addMagicNode(deltaLibrary, 'library');
+                            this.gotoFolder(deltaLibrary);
+                          })
                             //show change menu prompt,
                             //set delta info in prompt
                         };
@@ -1909,7 +1976,7 @@ export class App extends BaseApp {
      */
 
     public showChangeMenu(library: BTGlobalTreeNodeInfo) {
-      this.libraries.scanLibraryDelta(library);
+        this.libraries.scanLibraryDelta(library);
     }
 
     public createChangeMenu(parent: HTMLElement): void {
@@ -2444,7 +2511,7 @@ export class App extends BaseApp {
             const childThumbnailDiv = createDocumentElement('div', {
                 class: 'select-item-dialog-thumbnail-container os-no-shrink',
             });
-            console.log('parent: ', parent, 'item: ', item);
+            console.log('parent: ', parent, 'item: ', item, 'nodeInfo: ', nodeInfo);
             const thumbnailInfo = Object.assign({}, parent);
             thumbnailInfo['elementId'] = item.elementId;
             thumbnailInfo['elementType'] = item.elementType;
@@ -2850,6 +2917,7 @@ export class App extends BaseApp {
         nodeInfo: BTGlobalTreeNodeInfo,
         insertInfo: configInsertInfo
     ) {
+        console.log('processing', nodeInfo, insertInfo);
         let documentNodeInfo: BTGlobalTreeNodeInfo = nodeInfo;
         // this.currentNodes.items.forEach((nodeItem: BTGlobalTreeNodeInfo)=>{
         //   if(nodeItem.id == item.documentId)return documentNodeInfo = nodeItem;
@@ -3103,7 +3171,8 @@ export class App extends BaseApp {
                 this.setInProgress(false);
 
                 // TODO: Figure out why we don't get any output when it actually succeeds
-                if (reason !== 'Unexpected end of JSON input') {
+                // post request returns undefined instead of {}
+                if (reason.message !== 'Unexpected end of JSON input') {
                     console.log(`failed to create reason=${reason}`);
                 }
             });
@@ -3421,17 +3490,27 @@ export class App extends BaseApp {
         } else if (item.jsonType === 'proxy-library') {
             console.log('Going to a proxy library');
             console.log(item);
-            this.libraries.getProxyLibrary(undefined, item.id).then((res) => {
-                this.addBreadcrumbNode(item);
-                this.setBreadcrumbs(this.currentBreadcrumbs, teamroot);
-                this.ProcessNodeResults(
-                    {
-                        items: res.contents,
-                        pathToRoot: this.currentBreadcrumbs,
-                    },
-                    teamroot
-                );
-            });
+            this.libraries
+                .getProxyLibrary(undefined, item.id)
+                .then((res) => {
+                    this.addBreadcrumbNode(item);
+                    this.setBreadcrumbs(this.currentBreadcrumbs, teamroot);
+                    this.ProcessNodeResults(
+                        {
+                            items: res.contents,
+                            pathToRoot: this.currentBreadcrumbs,
+                        },
+                        teamroot
+                    );
+                })
+                .catch((err) => {
+                    if (err.status === 403) {
+                        //User should delete library
+                        dumpNodes.innerText =
+                            'Library does not exist\nPlease recover it or remove this library';
+                        this.processMagicNode(this.currentBreadcrumbs[0].id);
+                    }
+                });
         } else if (item.jsonType === 'proxy-folder') {
             console.log('Going to a proxy folder');
             this.libraries.getProxyLibrary(undefined, item.projectId).then((res) => {
