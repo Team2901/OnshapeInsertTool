@@ -69,11 +69,13 @@ export class Library extends Preferences {
                 if (res !== undefined) {
                     const { contents, library } = res;
                     // console.log('library contains when adding node', contents, node);
+                    if (node.jsonType === 'proxy-folder') {
+                        node = this.generateProxyFolderInfo(node, library, library);
+                    } else {
+                        node['parentId'] = library.id;
+                    }
                     const newContents: BTGlobalTreeNodeMagicDataInfo[] =
-                        this.addNodeToProxyArray(
-                            this.generateProxyFolderInfo(node, library, library),
-                            contents
-                        );
+                        this.addNodeToProxyArray(node, contents);
                     this.setProxyLibrary(library, newContents).then((res) => {
                         if (res === undefined || res === false) resolve(false);
                         resolve(true);
@@ -99,11 +101,13 @@ export class Library extends Preferences {
         return new Promise((resolve, _reject) => {
             this.getProxyFolder(library, folder.id).then((contents) => {
                 if (contents !== undefined) {
+                    if (node.jsonType === 'proxy-folder') {
+                        node = this.generateProxyFolderInfo(node, library, folder);
+                    } else {
+                        node['parentId'] = library.id;
+                    }
                     const newContents: BTGlobalTreeNodeMagicDataInfo[] =
-                        this.addNodeToProxyArray(
-                            this.generateProxyFolderInfo(node, library, folder),
-                            contents
-                        );
+                        this.addNodeToProxyArray(node, contents);
                     this.setProxyFolder(library, folder, newContents);
                     resolve(true);
                 } else {
@@ -256,7 +260,10 @@ export class Library extends Preferences {
         return new Promise((resolve, reject) => {
             let removePromise: Promise<boolean>;
             // getting node parent is annoying
-            if (node.href === library.id) {
+            if (
+                (node.jsonType === 'proxy-folder' && node.href === library.id) ||
+                (node.jsonType === 'document-summary' && node['parentId'] === library.id)
+            ) {
                 removePromise = this.removeNodeFromProxyLibrary(
                     node,
                     undefined,
@@ -271,6 +278,7 @@ export class Library extends Preferences {
                     true
                 );
             }
+
             removePromise.then((res) => {
                 if (res === false) resolve(false);
                 let addPromise: Promise<boolean>;
@@ -874,6 +882,7 @@ export class Library extends Preferences {
                     descendantArray: BTGlobalTreeNodeInfo[];
                 }
             >(200);
+            let notPublics = [];
             TPU.setGlobalTaskInfo({ library, descendantArray: [] });
             TPU.setProcessingFunction((taskInfo, addTask, globalTaskInfo) => {
                 return new Promise((resolve2, reject2) => {
@@ -885,7 +894,8 @@ export class Library extends Preferences {
                             addTask({ folder });
                         }
                     )
-                        .then(() => {
+                        .then((notPublic) => {
+                            notPublics = notPublics.concat(notPublic);
                             resolve2();
                         })
                         .catch((err) => {
@@ -913,6 +923,7 @@ export class Library extends Preferences {
                     this.proxyDescendantName,
                     TPU.globalTaskInfo.descendantArray
                 );
+                console.log(notPublics);
                 console.log(TPU.globalTaskInfo.descendantArray);
                 console.log(TPU.globalTaskInfo.descendantArray.length + ' descendants');
                 resolve();
@@ -1120,7 +1131,7 @@ export class Library extends Preferences {
         library: BTGlobalTreeNodeInfo,
         descendantArray?: BTGlobalTreeNodeInfo[],
         recurseOnFolder: Function = this.refactorFolder
-    ): Promise<void> {
+    ): Promise<BTGlobalTreeNodeInfo[]> {
         // console.log('cloning refactoring', arguments);
         return new Promise((resolve, reject) => {
             let getChildrenPromise: Promise<BTGlobalTreeNodeInfo[]>;
@@ -1139,13 +1150,20 @@ export class Library extends Preferences {
                         return resolve(undefined);
                     }
                     // console.log('iterating folder ', folder, ' and children', children);
+                    const notPublic = [];
                     children.forEach((child) => {
                         if (child.jsonType === 'proxy-folder') {
                             descendantArray.push(child);
                             recurseOnFolder(child, library, descendantArray);
                         }
+                        if (
+                            child.jsonType === 'document-summary' &&
+                            child['_public'] === false
+                        ) {
+                            notPublic.push(child);
+                        }
                     });
-                    resolve();
+                    resolve(notPublic);
                 })
                 .catch((res) => {
                     // console.log('ERROR_____', res);
