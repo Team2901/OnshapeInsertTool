@@ -15,7 +15,7 @@ class InformationReporter<T>{
   get info():T{
     return this._info
   }
-  public incrementNumber(key:string,value:number){
+  public incrementNumber(key:string,value:number = 1){
     this._info[key] += value;
     this.onupdate(this._info);
   }

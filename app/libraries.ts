@@ -22,7 +22,7 @@ export class Library extends Preferences {
     proxyDescendantName = SPECIALCHAR + 'descendant' + SPECIALCHAR;
     proxyParentFolder = SPECIALCHAR + 'parentfolder' + SPECIALCHAR;
     rawLibraryName = "︴RAW DON'T RENAME︴";
-    libraryDifferenceName = 'Library Difference(You can delete)';
+    libraryDifferenceName = 'Difference(You can delete)';
 
     bookIconDocument: BTGlobalTreeProxyInfo = {
         jsonType: 'document-summary',
@@ -69,25 +69,15 @@ export class Library extends Preferences {
                 if (res !== undefined) {
                     const { contents, library } = res;
                     // console.log('library contains when adding node', contents, node);
-                    const newContents: BTGlobalTreeNodeMagicDataInfo[] = [];
-                    let contentNode: BTGlobalTreeNodeMagicDataInfo;
-                    let duplicate: BTGlobalTreeNodeMagicDataInfo;
-                    //Iterate contents and don't add duplicates to new list
-                    contents.unshift(node);
-                    for (let i in contents) {
-                        contentNode = contents[i];
-                        duplicate = newContents.find(
-                            (element: BTGlobalTreeNodeMagicDataInfo) => {
-                                return (
-                                    element.id === contentNode.id &&
-                                    element.configuration === contentNode.configuration
-                                );
-                            }
+                    const newContents: BTGlobalTreeNodeMagicDataInfo[] =
+                        this.addNodeToProxyArray(
+                            this.generateProxyFolderInfo(node, library, library),
+                            contents
                         );
-                        // console.log('Found duplicate: ', duplicate, contents, node);
-                        if (duplicate === undefined) newContents.push(contentNode);
-                    }
-                    this.setProxyLibrary(library, newContents);
+                    this.setProxyLibrary(library, newContents).then((res) => {
+                        if (res === undefined || res === false) resolve(false);
+                        resolve(true);
+                    });
                 } else {
                     resolve(undefined);
                 }
@@ -109,7 +99,11 @@ export class Library extends Preferences {
         return new Promise((resolve, _reject) => {
             this.getProxyFolder(library, folder.id).then((contents) => {
                 if (contents !== undefined) {
-                    const newContents = this.addNodeToProxyArray(node, contents);
+                    const newContents: BTGlobalTreeNodeMagicDataInfo[] =
+                        this.addNodeToProxyArray(
+                            this.generateProxyFolderInfo(node, library, folder),
+                            contents
+                        );
                     this.setProxyFolder(library, folder, newContents);
                     resolve(true);
                 } else {
@@ -141,11 +135,13 @@ export class Library extends Preferences {
                             newContents.push(contentNode);
                         }
                     }
-                    if (skipUpdateDescendants !== true) {
-                        this.updateLibraryDescendants(library, 1, [node]);
-                    }
-                    this.setProxyLibrary(library, newContents);
-                    resolve(true);
+                    this.setProxyLibrary(library, newContents).then((res) => {
+                        if (res === undefined || res === false) return resolve(false);
+                        if (skipUpdateDescendants !== true) {
+                            this.updateLibraryDescendants(library, 1, [node]);
+                        }
+                        resolve(true);
+                    });
                 } else {
                     resolve(undefined);
                 }
@@ -181,11 +177,13 @@ export class Library extends Preferences {
                         }
                     }
 
-                    if (skipUpdateDescendants !== true) {
-                        this.updateLibraryDescendants(library, 1, [node]);
-                    }
-                    this.setProxyFolder(library, folder, newContents);
-                    resolve(true);
+                    this.setProxyFolder(library, folder, newContents).then((res) => {
+                        if (res === undefined || res === false) return resolve(false);
+                        if (skipUpdateDescendants !== true) {
+                            this.updateLibraryDescendants(library, 1, [node]);
+                        }
+                        resolve(true);
+                    });
                 } else {
                     resolve(undefined);
                 }
@@ -202,49 +200,91 @@ export class Library extends Preferences {
      * @param childOfLibrary folder is a child of the library, default is false
      * @returns proxy folder that node was added to
      */
-    public addNodeToProxySafe(
+    // public addNodeToProxySafe(
+    //     node: BTGlobalTreeNodeInfo,
+    //     library: BTGlobalTreeProxyInfo,
+    //     folder?: BTGlobalTreeProxyInfo,
+    //     childOfLibrary: boolean = false
+    // ): Promise<BTGlobalTreeNodeInfo> {
+    //     return new Promise((resolve, reject) => {
+    //         let getChildrenPromise: Promise<BTGlobalTreeNodeInfo[]>;
+    //         if (childOfLibrary) {
+    //             //iterating library
+    //             getChildrenPromise = new Promise(async (res, rej) => {
+    //                 const result = await this.getProxyLibrary(undefined, library.id);
+    //                 if (result !== undefined && result !== null) {
+    //                     res(result.contents);
+    //                 } else {
+    //                     res(undefined);
+    //                 }
+    //             });
+    //         } else {
+    //             getChildrenPromise = this.getProxyFolder(library, folder.id);
+    //         }
+    //         getChildrenPromise.then(async (children: BTGlobalTreeNodeInfo[]) => {
+    //             if (children !== undefined && children !== null) {
+    //                 const newChildren = this.addNodeToProxyArray(node, children);
+    //                 if (childOfLibrary) {
+    //                     return resolve(this.setProxyLibrary(library, newChildren));
+    //                 }
+    //                 return resolve(this.setProxyFolder(library, folder, newChildren));
+    //             } else {
+    //                 this.createProxyFolder(
+    //                     library,
+    //                     folder,
+    //                     undefined,
+    //                     [node],
+    //                     true,
+    //                     true
+    //                 );
+    //             }
+    //         });
+    //         if (childOfLibrary) {
+    //             return resolve(this.addNodeToProxyLibrary(node, undefined, library.id));
+    //         }
+    //         resolve(this.addNodeToProxyFolder(node, library, folder));
+    //     });
+    // }
+
+    public moveProxyNode(
         node: BTGlobalTreeNodeInfo,
-        library: BTGlobalTreeProxyInfo,
-        folder?: BTGlobalTreeProxyInfo,
-        childOfLibrary: boolean = false
-    ): Promise<BTGlobalTreeNodeInfo> {
+        library: BTGlobalTreeNodeInfo,
+        newParent: BTGlobalTreeNodeInfo,
+        newLibrary: BTGlobalTreeNodeInfo
+    ): Promise<boolean> {
+        console.log(arguments);
         return new Promise((resolve, reject) => {
-            let getChildrenPromise: Promise<BTGlobalTreeNodeInfo[]>;
-            if (childOfLibrary) {
-                //iterating library
-                getChildrenPromise = new Promise(async (res, rej) => {
-                    const result = await this.getProxyLibrary(undefined, library.id);
-                    if (result !== undefined && result !== null) {
-                        res(result.contents);
-                    } else {
-                        res(undefined);
-                    }
-                });
+            let removePromise: Promise<boolean>;
+            // getting node parent is annoying
+            if (node.href === library.id) {
+                removePromise = this.removeNodeFromProxyLibrary(
+                    node,
+                    undefined,
+                    library.id,
+                    false
+                );
             } else {
-                getChildrenPromise = this.getProxyFolder(library, folder.id);
+                removePromise = this.removeNodeFromProxyFolder(
+                    node,
+                    library,
+                    { jsonType: 'proxy-folder', id: node.href },
+                    true
+                );
             }
-            getChildrenPromise.then(async (children: BTGlobalTreeNodeInfo[]) => {
-                if (children !== undefined && children !== null) {
-                    const newChildren = this.addNodeToProxyArray(node, children);
-                    if (childOfLibrary) {
-                        return this.setProxyLibrary(library, newChildren);
-                    }
-                    return this.setProxyFolder(library, folder, newChildren);
+            removePromise.then((res) => {
+                if (res === false) resolve(false);
+                let addPromise: Promise<boolean>;
+                if (newParent.id === newLibrary.id) {
+                    console.log('adding to library');
+                    addPromise = this.addNodeToProxyLibrary(node, undefined, library.id);
                 } else {
-                    this.createProxyFolder(
-                        library,
-                        folder,
-                        undefined,
-                        [node],
-                        true,
-                        true
-                    );
+                    addPromise = this.addNodeToProxyFolder(node, newLibrary, newParent);
                 }
+                addPromise.then((res) => {
+                    if (res === false) resolve(false);
+                    resolve(true);
+                });
             });
-            if (childOfLibrary) {
-                this.addNodeToProxyLibrary(node, undefined, library.id);
-            }
-            return this.addNodeToProxyFolder(node, library, folder);
         });
     }
 
@@ -401,7 +441,8 @@ export class Library extends Preferences {
                         if (child.jsonType === 'folder') {
                             children[index] = this.generateProxyFolderInfo(
                                 child,
-                                library
+                                library,
+                                folder
                             );
                         }
                     });
@@ -575,84 +616,84 @@ export class Library extends Preferences {
      * @param library library chain is in
      * @param pathsToRoot array of folder references, in order child, parent
      * @returns array of proxy folders, in order child, parent
-     */
-    public createProxyFolderPathsToRoot(
-        library: BTGlobalTreeNodeInfo,
-        pathsToRoot: string[][]
-    ): Promise<BTGlobalTreeNodeInfo[]> {
-        return new Promise((resolve, reject) => {
-            const folderInfo: { [id: string]: [] } = {};
+    //  */
+    // public createProxyFolderPathsToRoot(
+    //     library: BTGlobalTreeNodeInfo,
+    //     pathsToRoot: string[][]
+    // ): Promise<BTGlobalTreeNodeInfo[]> {
+    //     return new Promise((resolve, reject) => {
+    //         const folderInfo: { [id: string]: [] } = {};
 
-            pathsToRoot.forEach((pathToRoot: string[]) => {});
+    //         pathsToRoot.forEach((pathToRoot: string[]) => {});
 
-            const TPU = new TaskProcessingUnit<
-                {
-                    reference: BTGlobalTreeNodeInfo;
-                    contents: BTGlobalTreeNodeInfo[];
-                    childOfLibrary: boolean;
-                    chainStart?: boolean;
-                },
-                {
-                    library: BTGlobalTreeNodeInfo;
-                    folderChain: BTGlobalTreeNodeInfo[];
-                }
-            >(6);
+    //         const TPU = new TaskProcessingUnit<
+    //             {
+    //                 reference: BTGlobalTreeNodeInfo;
+    //                 contents: BTGlobalTreeNodeInfo[];
+    //                 childOfLibrary: boolean;
+    //                 chainStart?: boolean;
+    //             },
+    //             {
+    //                 library: BTGlobalTreeNodeInfo;
+    //                 folderChain: BTGlobalTreeNodeInfo[];
+    //             }
+    //         >(6);
 
-            TPU.setGlobalTaskInfo({
-                library,
-                folderChain: [] as unknown as BTGlobalTreeNodeInfo[],
-            });
-            TPU.setProcessingFunction((taskInfo, addTask, globalTaskInfo) => {
-                return new Promise((res, rej) => {
-                    if (taskInfo.chainStart) {
-                        if (taskInfo.childOfLibrary) {
-                            this.setProxyLibrary(
-                                globalTaskInfo.library,
-                                taskInfo.contents
-                            ).then(() => res());
-                        } else {
-                            this.createProxyFolder(
-                                globalTaskInfo.library,
-                                taskInfo.reference,
-                                undefined,
-                                taskInfo.contents,
-                                true,
-                                true
-                            ).then(() => res());
-                        }
-                    }
-                    this.addNodeToProxySafe(
-                        taskInfo.contents[0],
-                        globalTaskInfo.library,
-                        taskInfo.reference,
-                        taskInfo.childOfLibrary
-                    ).then((folder) => {
-                        if (folder !== undefined && folder !== null) {
-                            globalTaskInfo.folderChain.push(folder);
-                        }
-                        res();
-                    });
-                });
-            });
-            // chain.forEach((folder, index) => {
-            //     let contents: BTGlobalTreeNodeInfo[] = undefined;
-            //     let childOfLibrary = false;
-            //     if (index === 0) {
-            //         contents = children;
-            //     } else if (index < chain.length - 1) {
-            //         contents = [chain[index + 1]];
-            //     } else {
-            //         childOfLibrary = true;
-            //     }
-            //     TPU.addTask({ reference: folder, contents, childOfLibrary });
+    //         TPU.setGlobalTaskInfo({
+    //             library,
+    //             folderChain: [] as unknown as BTGlobalTreeNodeInfo[],
+    //         });
+    //         TPU.setProcessingFunction((taskInfo, addTask, globalTaskInfo) => {
+    //             return new Promise((res, rej) => {
+    //                 if (taskInfo.chainStart) {
+    //                     if (taskInfo.childOfLibrary) {
+    //                         this.setProxyLibrary(
+    //                             globalTaskInfo.library,
+    //                             taskInfo.contents
+    //                         ).then(() => res());
+    //                     } else {
+    //                         this.createProxyFolder(
+    //                             globalTaskInfo.library,
+    //                             taskInfo.reference,
+    //                             undefined,
+    //                             taskInfo.contents,
+    //                             true,
+    //                             true
+    //                         ).then(() => res());
+    //                     }
+    //                 }
+    //                 this.addNodeToProxySafe(
+    //                     taskInfo.contents[0],
+    //                     globalTaskInfo.library,
+    //                     taskInfo.reference,
+    //                     taskInfo.childOfLibrary
+    //                 ).then((folder) => {
+    //                     if (folder !== undefined && folder !== null) {
+    //                         globalTaskInfo.folderChain.push(folder);
+    //                     }
+    //                     res();
+    //                 });
+    //             });
+    //         });
+    //         // chain.forEach((folder, index) => {
+    //         //     let contents: BTGlobalTreeNodeInfo[] = undefined;
+    //         //     let childOfLibrary = false;
+    //         //     if (index === 0) {
+    //         //         contents = children;
+    //         //     } else if (index < chain.length - 1) {
+    //         //         contents = [chain[index + 1]];
+    //         //     } else {
+    //         //         childOfLibrary = true;
+    //         //     }
+    //         //     TPU.addTask({ reference: folder, contents, childOfLibrary });
 
-            //     this.createProxyFolder(library, folder);
-            // });
-            TPU.runTasks().then(() => {
-                resolve(TPU.globalTaskInfo.folderChain);
-            });
-        });
-    }
+    //         //     this.createProxyFolder(library, folder);
+    //         // });
+    //         TPU.runTasks().then(() => {
+    //             resolve(TPU.globalTaskInfo.folderChain);
+    //         });
+    //     });
+    // }
 
     //   /**
     //    *
@@ -811,6 +852,7 @@ export class Library extends Preferences {
                     console.log(TPU.globalTaskInfo.descendantArray);
                     console.log(TPU.globalTaskInfo.descendantArray.length);
                     console.log((Date.now() - startTime) / 1000);
+                    console.log(library);
                     this.cloneProxyLibrary(
                         library,
                         this.encodeLibraryName(folder.name, true)
@@ -881,144 +923,195 @@ export class Library extends Preferences {
     //compare library to library_raw
     //find additions, create library_diff with additions
     public scanLibraryDelta(
-        library: BTGlobalTreeNodeInfo
+        library: BTGlobalTreeNodeInfo,
+        infoRep: InformationReporter<{
+            folders: number;
+            addtions: number;
+            status: string;
+        }>
     ): Promise<BTGlobalTreeNodeInfo> {
         return new Promise((resolve, reject) => {
             console.log('_____________', library);
             const promises = [];
-            promises.push(this.createProxyLibrary(undefined, library.name, true));
+            promises.push(
+                this.getProxyLibrary(
+                    this.decodeLibraryName(this.encodeLibraryName(library.name, true))
+                )
+            );
             promises.push(
                 this.createProxyLibrary(
                     undefined,
                     library.name + this.libraryDifferenceName
                 )
             );
-            Promise.all(promises).then((res) => {
-                if (res[0] === undefined || res[1] === undefined) resolve(undefined);
-                const rawLibrary = res[0];
-                const deltaLibrary = res[1];
-                const TPU = new TaskProcessingUnit<
-                    { folder: BTGlobalTreeNodeInfo; isLibrary?: boolean },
-                    {
-                        library: BTGlobalTreeNodeInfo;
-                        deltaLibrary: BTGlobalTreeNodeInfo;
-                        indexedFoldersInfo: {
-                            [id: string]: {
+            infoRep.setString('status', 'Locating Raw Library and Delta Library');
+            Promise.all(promises)
+                .then((res) => {
+                    if (res[0] === undefined) {
+                        infoRep.setString(
+                            'status',
+                            'Library parent folder info does not exist'
+                        );
+                        reject();
+                    }
+                    if (res[1] === undefined) {
+                        //this shouldn't happen
+                        console.error('Delta library not created');
+                        resolve(undefined);
+                    }
+                    infoRep.setString('status', 'Raw Library and Delta Library located');
+                    const rawLibrary = res[0].library;
+                    const deltaLibrary = res[1];
+                    const TPU = new TaskProcessingUnit<
+                        { folder: BTGlobalTreeNodeInfo; isLibrary?: boolean },
+                        {
+                            library: BTGlobalTreeNodeInfo;
+                            deltaLibrary: BTGlobalTreeNodeInfo;
+                            indexedFoldersInfo: {
+                                [id: string]: {
+                                    folder: BTGlobalTreeNodeInfo;
+                                    children: BTGlobalTreeNodeInfo[];
+                                };
+                            };
+                        }
+                    >(16);
+                    TPU.setGlobalTaskInfo({
+                        library: rawLibrary,
+                        deltaLibrary,
+                        indexedFoldersInfo: {},
+                    });
+                    TPU.setProcessingFunction((taskInfo, addTask, globalTaskInfo) => {
+                        return new Promise((resolve2, reject2) => {
+                            this.scanFolderDelta(
+                                taskInfo.folder,
+                                globalTaskInfo.library,
+                                globalTaskInfo.deltaLibrary,
+                                (folder: BTGlobalTreeNodeInfo) => {
+                                    addTask({ folder });
+                                },
+                                taskInfo.isLibrary ? true : false
+                            )
+                                .then(
+                                    (indexedFolderInfo: {
+                                        folder: BTGlobalTreeNodeInfo;
+                                        children: BTGlobalTreeNodeInfo[];
+                                    }) => {
+                                        if (indexedFolderInfo !== undefined) {
+                                            const { folder, children } =
+                                                indexedFolderInfo;
+                                            if (
+                                                globalTaskInfo.indexedFoldersInfo[
+                                                    folder.id
+                                                ] === undefined ||
+                                                globalTaskInfo.indexedFoldersInfo[
+                                                    folder.id
+                                                ] === null
+                                            ) {
+                                                globalTaskInfo.indexedFoldersInfo[
+                                                    folder.id
+                                                ] = indexedFolderInfo;
+                                            } else {
+                                                globalTaskInfo.indexedFoldersInfo[
+                                                    folder.id
+                                                ].children = children.concat(
+                                                    globalTaskInfo.indexedFoldersInfo[
+                                                        folder.id
+                                                    ].children
+                                                );
+                                            }
+                                            infoRep.incrementNumber(
+                                                'additions',
+                                                children.length
+                                            );
+                                        }
+                                        infoRep.incrementNumber('folders');
+                                        resolve2();
+                                    }
+                                )
+                                .catch((err) => {
+                                    console.groupCollapsed();
+                                    console.log('__', err, JSON.stringify(err));
+                                    console.log(err.name, err.response, err.message);
+                                    console.groupEnd();
+                                    if (
+                                        (err.response && err.response.status === 500) ||
+                                        err.name === 'SyntaxError'
+                                    ) {
+                                        console.log('Task Added Again');
+                                        addTask(taskInfo);
+                                    }
+                                    resolve2();
+                                });
+                        });
+                    });
+                    const folder = Object.assign({}, library);
+                    let validateParentFolder = () =>
+                        new Promise<boolean>((res) => res(true));
+                    if (
+                        folder.resourceType === undefined ||
+                        folder.resourceType === 'document'
+                    ) {
+                        validateParentFolder = () =>
+                            new Promise<boolean>((_resolve, _reject) => {
+                                this.getBTGArray(this.proxyParentFolder, library).then(
+                                    (res) => {
+                                        if (res === undefined || res[0] === undefined) {
+                                            infoRep.setString(
+                                                'status',
+                                                'Library parent folder info does not exist'
+                                            );
+                                            return _resolve(false);
+                                        }
+                                        folder.resourceType = res[0].id;
+                                        _resolve(true);
+                                    }
+                                );
+                            });
+                    }
+                    validateParentFolder().then((res) => {
+                        if (res === undefined || res === false) resolve(undefined);
+                        TPU.addTask({
+                            folder: library,
+                            isLibrary: true,
+                        });
+                        infoRep.setString('Status', 'Scanning folders');
+                        TPU.runTasks().then(() => {
+                            const indexedFoldersInfo =
+                                TPU.globalTaskInfo.indexedFoldersInfo;
+
+                            if (Object.keys(indexedFoldersInfo).length === 0) {
+                                infoRep.setString('status', 'No difference');
+                                return resolve(deltaLibrary); //no difference?
+                            }
+                            let additions = [];
+                            let info: {
                                 folder: BTGlobalTreeNodeInfo;
                                 children: BTGlobalTreeNodeInfo[];
                             };
-                        };
-                    }
-                >(16);
-                TPU.setGlobalTaskInfo({
-                    library: rawLibrary,
-                    deltaLibrary,
-                    indexedFoldersInfo: {},
-                });
-                TPU.setProcessingFunction((taskInfo, addTask, globalTaskInfo) => {
-                    return new Promise((resolve2, reject2) => {
-                        this.scanFolderDelta(
-                            taskInfo.folder,
-                            globalTaskInfo.library,
-                            globalTaskInfo.deltaLibrary,
-                            (folder: BTGlobalTreeNodeInfo) => {
-                                addTask({ folder });
-                            },
-                            taskInfo.isLibrary ? true : false
-                        )
-                            .then(
-                                (indexedFolderInfo: {
-                                    folder: BTGlobalTreeNodeInfo;
-                                    children: BTGlobalTreeNodeInfo[];
-                                }) => {
-                                    if (indexedFolderInfo !== undefined) {
-                                        const { folder, children } = indexedFolderInfo;
-                                        if (
-                                            globalTaskInfo.indexedFoldersInfo[
-                                                folder.id
-                                            ] === undefined ||
-                                            globalTaskInfo.indexedFoldersInfo[
-                                                folder.id
-                                            ] === null
-                                        ) {
-                                            globalTaskInfo.indexedFoldersInfo[folder.id] =
-                                                indexedFolderInfo;
-                                        } else {
-                                            globalTaskInfo.indexedFoldersInfo[
-                                                folder.id
-                                            ].children = children.concat(
-                                                globalTaskInfo.indexedFoldersInfo[
-                                                    folder.id
-                                                ].children
-                                            );
-                                        }
-                                    }
-
-                                    resolve2();
-                                }
-                            )
-                            .catch((err) => {
-                                console.groupCollapsed();
-                                console.log('__', err, JSON.stringify(err));
-                                console.log(err.name, err.response, err.message);
-                                console.groupEnd();
-                                if (
-                                    (err.response && err.response.status === 500) ||
-                                    err.name === 'SyntaxError'
-                                ) {
-                                    console.log('Task Added Again');
-                                    addTask(taskInfo);
-                                }
-                                resolve2();
+                            for (let id in indexedFoldersInfo) {
+                                info = indexedFoldersInfo[id];
+                                info.folder.projectId = deltaLibrary.id;
+                                additions.push(info.folder);
+                            }
+                            if (additions.length === 0) {
+                                this.onshape.documentApi.deleteDocument({
+                                    did: deltaLibrary.id,
+                                });
+                                infoRep.setString('Status', 'No difference');
+                                resolve(undefined);
+                            }
+                            this.setProxyLibrary(deltaLibrary, additions).then(() => {
+                                resolve(deltaLibrary);
                             });
-                    });
-                });
-                const folder = Object.assign({}, library);
-                let validateParentFolder = () => new Promise<void>((res) => res());
-                if (folder.resourceType === undefined) {
-                    validateParentFolder = () =>
-                        new Promise<void>(() => {
-                            this.getBTGArray(this.proxyParentFolder, folder).then(
-                                (res) => {
-                                    if (res === undefined || res[0] === undefined)
-                                        return reject(
-                                            'Library parent folder info does not exist'
-                                        );
-                                    folder.resourceType = res[0].id;
-                                }
-                            );
+                            //createpathstoroot
+                            //sort into {[id:string]:[/*children*/]}
+                            //joing children if object[id] already exists
                         });
-                }
-                validateParentFolder().then(() => {
-                    TPU.addTask({
-                        folder: library,
-                        isLibrary: true,
                     });
-                    TPU.runTasks().then(() => {
-                        const indexedFoldersInfo = TPU.globalTaskInfo.indexedFoldersInfo;
-
-                        if (Object.keys(indexedFoldersInfo).length === 0) {
-                            console.log('No difference', TPU);
-                            resolve(deltaLibrary); //no difference?
-                        }
-                        let additions = [];
-                        let info: {
-                            folder: BTGlobalTreeNodeInfo;
-                            children: BTGlobalTreeNodeInfo[];
-                        };
-                        for (let id in indexedFoldersInfo) {
-                            info = indexedFoldersInfo[id];
-                            additions = additions.concat(info.children);
-                        }
-                        this.setProxyLibrary(deltaLibrary, additions).then(() => {
-                            resolve(deltaLibrary);
-                        });
-                        //createpathstoroot
-                        //sort into {[id:string]:[/*children*/]}
-                        //joing children if object[id] already exists
-                    });
+                })
+                .catch((err) => {
+                    reject(err);
                 });
-            });
         });
     }
 
@@ -1112,12 +1205,12 @@ export class Library extends Preferences {
                         return resolve(undefined);
                     }
                     const additions: BTGlobalTreeNodeInfo[] = [];
-                    console.log("_____")
+                    console.log('_____');
                     console.log(proxyChildren, folderChildren);
 
                     const proxyMap: { [id: string]: BTGlobalTreeNodeInfo } = {};
                     proxyChildren.forEach((child) => (proxyMap[child.id] = child));
-                    console.log(proxyMap)
+                    console.log(proxyMap);
                     let searchedChild: BTGlobalTreeNodeInfo;
                     folderChildren.forEach((child) => {
                         searchedChild = proxyMap[child.id];
@@ -1133,13 +1226,14 @@ export class Library extends Preferences {
                             }
                         }
                     });
-                    console.log(additions)
+                    console.log('Additons', additions);
+                    folder = Object.assign({}, folder);
                     const indexedFolderInfo: {
                         folder: BTGlobalTreeNodeInfo;
                         children: BTGlobalTreeNodeInfo[];
                     } = {
                         folder,
-                        children: proxyChildren,
+                        children: additions,
                     };
                     console.log(proxyMap);
                     Object.values(proxyMap).forEach((child) => {
@@ -1147,8 +1241,13 @@ export class Library extends Preferences {
                             recurseOnFolder(child);
                         }
                     });
-                    if (additions.length === 0) resolve(undefined);
-
+                    if (additions.length === 0) return resolve(undefined);
+                    console.log(
+                        'Additions length is ' +
+                            additions.length +
+                            ' for folder' +
+                            folder.name
+                    );
                     this.setProxyFolder(deltaLibrary, folder, additions).then(() => {
                         resolve(indexedFolderInfo);
                     });
@@ -1199,7 +1298,9 @@ export class Library extends Preferences {
             let accessorName = libraryName;
             //get raw library name without symbols but with raw warning
             if (rawLibrary) accessorName = this.decodeLibraryName(libraryName);
+            console.log('Getting proxy library ' + accessorName);
             this.getProxyLibrary(accessorName).then((res) => {
+                console.log('Proxy Library returned', res);
                 if (res === undefined) {
                     this.onshape.documentApi
                         .copyWorkspace({
@@ -1237,7 +1338,9 @@ export class Library extends Preferences {
      */
     public generateProxyFolderInfo(
         reference: BTGlobalTreeNodeInfo,
-        library: BTGlobalTreeNodeInfo
+        library: BTGlobalTreeNodeInfo,
+        parent?: BTGlobalTreeNodeInfo,
+        owner?: string
     ): BTGlobalTreeNodeInfo {
         return {
             jsonType: 'proxy-folder',
@@ -1245,8 +1348,9 @@ export class Library extends Preferences {
             id: reference.id,
             isContainer: true,
             projectId: library.id,
+            href: parent.id,
             owner: {
-                id: this.onshape.userId,
+                id: owner || this.onshape.userId,
             },
         };
     }
@@ -1268,7 +1372,7 @@ export class Library extends Preferences {
         skipUpdateDescendants?: boolean
     ): Promise<BTGlobalTreeNodeInfo> {
         return new Promise((resolve, _reject) => {
-            const libraryName = this.decodeLibraryName(library.name) || library.name;
+            const libraryName = this.decodeLibraryName(library.name);
             const proxyFolder: BTGlobalTreeNodeInfo = {
                 jsonType: 'proxy-folder',
                 isContainer: true,
@@ -1363,16 +1467,19 @@ export class Library extends Preferences {
                 documents['items'] = (
                     documents['items'] as Array<BTGlobalTreeNodeInfo>
                 ).filter((document) => {
-                    return document.name === this.encodeLibraryName(libraryName);
+                    return (
+                        document.name ===
+                        this.encodeLibraryName(this.decodeLibraryName(libraryName))
+                    );
                 });
             }
             this.getProxyDocumentFromQuery(documents)
                 .then((library: BTGlobalTreeProxyInfo) => {
                     if (library === undefined) {
+                        // console.error('Womp Womp');
                         return resolve(undefined);
                     } else {
-                        libraryName =
-                            this.decodeLibraryName(library.name) || library.name;
+                        libraryName = this.decodeLibraryName(library.name);
                         this.getAppElement(library.id, library)
                             .then((res) => {
                                 (getDescendants === true
@@ -1470,7 +1577,9 @@ export class Library extends Preferences {
                             sortOrder: '',
                             rawQuery:
                                 'type:document name:' +
-                                this.encodeLibraryName(libraryName),
+                                this.encodeLibraryName(
+                                    this.decodeLibraryName(libraryName)
+                                ),
                             documentFilter: 0,
                         },
                     })
@@ -1478,7 +1587,9 @@ export class Library extends Preferences {
                         resolve(
                             this.getProxyLibraryFromDocuments(
                                 res,
-                                libraryName,
+                                this.encodeLibraryName(
+                                    this.decodeLibraryName(libraryName)
+                                ),
                                 getDescendants
                             )
                         );
@@ -1594,6 +1705,6 @@ export class Library extends Preferences {
         if (result !== null) {
             return result[1];
         }
-        return undefined;
+        return libraryName;
     }
 }

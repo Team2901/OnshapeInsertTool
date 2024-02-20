@@ -30,6 +30,7 @@ import {
     BTDocumentElementInfo,
     BTDocumentSummaryInfo,
     BTFSValueUndefined2003FromJSON,
+    BTFlatSheetMetalFilter3018AllOfFromJSONTyped,
     BTGlobalTreeMagicNodeInfo,
     BTGlobalTreeNodeInfo,
     BTGlobalTreeNodesInfo,
@@ -51,6 +52,7 @@ import {
     BTPExpressionSwitch2632ToJSON,
     BTSingleAssemblyReferenceDisplayData1557AllOfFromJSONTyped,
     BTThumbnailInfo,
+    FolderApi,
     GBTElementType,
     GetInsertablesRequest,
     GetWMVEPsMetadataWvmEnum,
@@ -71,6 +73,8 @@ import {
 import { Library } from './libraries';
 import { appName as APP_NAME } from './app_settings.json';
 import { InformationReporter } from './InformationReporter';
+import { marked } from 'marked';
+
 export interface magicIconInfo {
     label: string;
     icon: OnshapeSVGIcon;
@@ -187,9 +191,10 @@ export class App extends BaseApp {
         FV: { icon: 'svg-icon-filter-favorite', label: 'Favorited' },
         LI: { icon: 'svg-icon-libraries', label: 'My Libraries' },
         GL: { icon: 'svg-icon-library-public', label: 'Global Libraries' },
+        HI: { icon: 'svg-icon-help-button', label: 'Help/Instructions' },
     };
     public homeGrouping: homeGroupInfo[] = [
-        { title: '', children: ['LI', 'FV', 'RI', 'GL', '11'] },
+        { title: '', children: ['LI', 'FV', 'RI', 'GL', '11', 'HI'] },
         { title: '━━━━━━━━', children: ['1', '0', '2', '12', '3'] },
         { title: 'Other', children: ['5', '6', '7', '8', '9', '14'] },
     ];
@@ -335,6 +340,25 @@ export class App extends BaseApp {
             userOwned: true,
             input: [
                 {
+                    name: 'lib-name',
+                    label: 'Library',
+                    type: 'select',
+                },
+                {
+                    name: 'proxy-name',
+                    label: 'Folder (Optional)',
+                    type: 'select',
+                },
+            ],
+        },
+        MOVEDOC: {
+            parentType: ['proxy-library', 'proxy-folder'],
+            documentType: ['proxy-document'],
+            name: 'movedoc',
+            label: 'Move Document',
+            userOwned: true,
+            input: [
+                {
                     name: 'newlocation',
                     label: 'New location',
                     type: 'select',
@@ -373,6 +397,7 @@ export class App extends BaseApp {
         this.preferences
             .initUserPreferences(this.appName)
             .then((_val) => {
+                this.onshape.userId = _val.owner.id;
                 // Create the main container
                 var div = createDocumentElement('div', { id: 'apptop' });
                 this.createPopupDialog(div);
@@ -414,6 +439,14 @@ export class App extends BaseApp {
                             return;
                         }
 
+                        if (this.preferences.newUser) {
+                            return this.gotoFolder({
+                                jsonType: 'magic',
+                                resourceType: 'magic',
+                                id: 'HI',
+                                name: 'Help/Instructions',
+                            });
+                        }
                         this.getLastLocation().then((lastLocation) => {
                             this.setBreadcrumbs(lastLocation);
                             this.gotoFolder(lastLocation[0]);
@@ -799,7 +832,7 @@ export class App extends BaseApp {
             const row = table.addBodyRow();
             const span = createDocumentElement('span', {
                 textContent: group.title,
-                style: "font-weight: bold;font-size: larger;font-style: italic; letter-spacing: -1px;"
+                style: 'font-weight: bold;font-size: larger;font-style: italic; letter-spacing: -1px;',
             });
             row.add(span);
             for (const magicid of group.children) {
@@ -819,7 +852,8 @@ export class App extends BaseApp {
         items: BTGlobalTreeMagicNodeInfo[],
         parentNode: BTGlobalTreeNodeInfo,
         teamroot: BTGlobalTreeNodeInfo,
-        subsetConfigurables: boolean
+        subsetConfigurables: boolean,
+        accessId: string
     ): void {
         // Figure out where we are to add the entries
         let container = this.getFileListContainer();
@@ -830,7 +864,7 @@ export class App extends BaseApp {
             let rect = new DOMRect(
                 event.clientX,
                 event.clientY,
-                containerBackground.clientWidth / 2,
+                (containerBackground.clientWidth / 3) * 2,
                 0
             );
             this.showActionMenu(undefined, parentNode, rect);
@@ -852,8 +886,8 @@ export class App extends BaseApp {
             // <td class="os-document-name document-item">Visor - John Toebes</td></tr></tbody></table>
             ////
             const libraryName = this.libraries.decodeLibraryName(item.name);
-            if (libraryName !== undefined) {
-                if(item.name.indexOf("︴raw") != -1)return;
+            if (libraryName !== item.name) {
+                if (item.name.indexOf('︴raw') != -1) return;
                 item.jsonType = 'proxy-library'; //just make sure
                 item.isContainer = true; //also to make sure
                 item.name = libraryName; //so it renders correctly
@@ -941,7 +975,13 @@ export class App extends BaseApp {
                     rowelem.onclick = () => {
                         this.hidePopup();
                         this.hideActionMenu();
-                        this.checkInsertItem(itemInfo, lastLoaded, rowContainer, true);
+                        this.checkInsertItem(
+                            itemInfo,
+                            lastLoaded,
+                            rowContainer,
+                            true,
+                            accessId
+                        );
                     };
                 }
             }
@@ -959,6 +999,7 @@ export class App extends BaseApp {
                             res,
                             item,
                             lastLoaded,
+                            accessId,
                             rowContainer,
                             false,
                             true
@@ -1133,11 +1174,11 @@ export class App extends BaseApp {
         const actionMenu = document.getElementById('docactionmenu');
         if (actionMenu !== null) {
             // TODO: Same as popup, Move actionMenu above item if it doesn't fit below
-            const actionMenuWidth = Math.max(200, rect.width);
+            const actionMenuWidth = Math.max(300, rect.width);
             actionMenu.style.left = String(rect.left) + 'px';
             actionMenu.style.top = String(rect.bottom) + 'px';
             actionMenu.style.width = String(actionMenuWidth) + 'px';
-            actionMenu.style.maxWidth = String(Math.max(200, rect.width)) + 'px';
+            actionMenu.style.maxWidth = String(Math.max(300, rect.width)) + 'px';
             const actionMenuDiv = actionMenu.firstChild as HTMLDivElement;
 
             //Move actionMenu into view
@@ -1186,8 +1227,9 @@ export class App extends BaseApp {
                 //makes sure user ownership status is right
                 if (option.userOwned) {
                     if (
-                        (item.owner && item.owner.id === this.onshape.userId) ||
-                        (item.createdBy && item.createdBy.id === this.onshape.userId)
+                        (item.owner && item.owner.id) !== this.onshape.userId &&
+                        item.createdBy &&
+                        item.createdBy.id !== this.onshape.userId
                     ) {
                         optionElement.parentElement.style.display = 'none';
                         continue;
@@ -1328,7 +1370,7 @@ export class App extends BaseApp {
                             this.hideActionMenuOptionInputs();
                             document.location.href = [
                                 'mailto:',
-                                'degelew25106@student.cghsnc.org', //
+                                'inserttool@ftconshape.com', //
                                 '?subject=',
                                 'Flaw in document ',
                                 item.name,
@@ -1395,7 +1437,16 @@ export class App extends BaseApp {
                                     if (itemInLibrary) {
                                         this.preferences.removeMagicNode(item, 'library');
                                     } else {
-                                        this.preferences.addMagicNode(item, 'library');
+                                        this.libraries
+                                            .getProxyLibrary(undefined, item.id)
+                                            .then((res) => {
+                                                item['elementId'] = res.library.elementId;
+                                                item['wvmid'] = res.library.wvmid;
+                                                this.preferences.addMagicNode(
+                                                    item,
+                                                    'library'
+                                                );
+                                            });
                                     }
                                     this.hideActionMenu();
                                 };
@@ -1697,6 +1748,143 @@ export class App extends BaseApp {
                         };
                         break;
                     }
+                    case 'MOVEDOC':
+                    case 'MOVEPROXY': {
+                        optionElement.onclick = () => {
+                            let selectedLibrary: BTGlobalTreeMagicNodeInfo;
+                            const inputLibElement = document.getElementById(
+                                optionId + '_lib-name'
+                            ) as HTMLInputElement;
+                            const inputProxyElement = document.getElementById(
+                                optionId + '_proxy-name'
+                            ) as HTMLInputElement;
+                            this.preferences
+                                .getAllOfMagicType('library')
+                                .then((libraries) => {
+                                    const libraryOptions: Array<{
+                                        id: string;
+                                        label: string;
+                                    }> = [];
+                                    libraries.forEach((library) => {
+                                        libraryOptions.push({
+                                            id: library.id,
+                                            label: this.libraries.decodeLibraryName(library.name),
+                                        });
+                                    });
+                                    this.updateActionMenuInputOptions(
+                                      inputLibElement.id,
+                                      libraryOptions
+                                  );
+                                });
+                            inputLibElement.onchange = () => {
+                                selectedLibrary = undefined;
+                                const libraryId = inputLibElement.value;
+                                console.log(libraryId);
+                                this.libraries
+                                    .getProxyLibrary(undefined, libraryId, true)
+                                    .then((library) => {
+                                        console.log(library);
+                                        selectedLibrary = library.library;
+                                        const descendants = library.descendants;
+                                        if (!descendants) return;
+                                        const folderOptions: Array<{
+                                            id: string;
+                                            label: string;
+                                        }> = [];
+                                        descendants.forEach((descendant) => {
+                                            folderOptions.push({
+                                                id: descendant.id,
+                                                label: descendant.name,
+                                            });
+                                        });
+                                        this.updateActionMenuInputOptions(
+                                            inputProxyElement.id,
+                                            folderOptions
+                                        );
+                                    });
+                            };
+                            inputDiv.style.display = 'flex';
+                            submitElement.onclick = (e) => {
+                                this.setInProgress();
+
+                                e.preventDefault();
+                                if (inputLibElement.value === '') {
+                                    //alert user that input must be filled
+                                    return;
+                                }
+                                let proxyId = inputProxyElement.value;
+                                if (proxyId === '') proxyId = undefined;
+                                const promises = [];
+                                promises.push(
+                                    new Promise((resolve, reject) => {
+                                        if (selectedLibrary !== undefined)
+                                            return resolve(selectedLibrary);
+                                        this.libraries
+                                            .getProxyLibrary(
+                                                undefined,
+                                                item.projectId,
+                                                false
+                                            )
+                                            .then((res) => {
+                                                if (res !== undefined)
+                                                    return resolve(res.library);
+                                                resolve(undefined);
+                                            });
+                                    })
+                                );
+                                promises.push(
+                                    new Promise((resolve, reject) => {
+                                        this.libraries
+                                            .getProxyLibrary(
+                                                undefined,
+                                                inputLibElement.value
+                                            )
+                                            .then((res) => {
+                                                if (
+                                                    res === undefined ||
+                                                    res.library === undefined
+                                                )
+                                                    return resolve(undefined);
+                                                resolve(res.library);
+                                            });
+                                    })
+                                );
+                                Promise.all(promises).then((res) => {
+                                    if (res !== undefined) {
+                                        const library = res[0];
+                                        const newLibrary = res[1];
+                                        if (
+                                            library === undefined ||
+                                            newLibrary === undefined ||
+                                            item.id === proxyId
+                                        ) {
+                                            console.warn(res);
+                                            this.setInProgress(false);
+                                        }
+                                        this.libraries
+                                            .moveProxyNode(
+                                                item,
+                                                library,
+                                                {
+                                                    jsonType: 'proxy-folder',
+                                                    id: proxyId || newLibrary.id,
+                                                },
+                                                newLibrary
+                                            )
+                                            .then(() => {
+                                                this.setInProgress(false);
+                                                this.hideActionMenu();
+                                            });
+                                    } else {
+                                        console.warn(res);
+                                        this.setInProgress(false);
+                                        //alert user that library is invalid
+                                    }
+                                });
+                            };
+                        };
+                        break;
+                    }
                     case 'CLONEFOLDER': {
                         optionElement.onclick = () => {
                             this.setInProgress();
@@ -1711,14 +1899,18 @@ export class App extends BaseApp {
                                 tfolders: number;
                                 status: string;
                             }>(
-                                { pfolders: 0, tfolders: 0, status: "" },
-                                (info: { pfolders: number; tfolders: number; status: string; }) => {
-                                    if(info.status == "Copy files"){
-                                      infoTextElement.innerText = `
+                                { pfolders: 0, tfolders: 0, status: '' },
+                                (info: {
+                                    pfolders: number;
+                                    tfolders: number;
+                                    status: string;
+                                }) => {
+                                    if (info.status == 'Copy files') {
+                                        infoTextElement.innerText = `
                                     🞄 ${info.pfolders}/${info.tfolders} folders processed
                               `; //${info.pfolders} folders proccessed of ${info.tfolders} discovered
-                                    }else{
-                                      infoTextElement.innerText = "\n  " + info.status;
+                                    } else {
+                                        infoTextElement.innerText = '\n🞄 ' + info.status;
                                     }
                                 }
                             );
@@ -1745,13 +1937,61 @@ export class App extends BaseApp {
                         break;
                     case 'SCANDELTA': {
                         optionElement.onclick = () => {
-                          this.libraries.scanLibraryDelta(item).then((deltaLibrary:BTGlobalTreeNodeInfo)=>{
-
-                            this.preferences.addMagicNode(deltaLibrary, 'library');
-                            this.gotoFolder(deltaLibrary);
-                          })
-                            //show change menu prompt,
-                            //set delta info in prompt
+                            this.setInProgress();
+                            const infoTextElement = createDocumentElement('span', {
+                                class: 'context-menu-item',
+                                style: 'padding:0px;',
+                            });
+                            optionElement.appendChild(infoTextElement);
+                            let infoRep: any;
+                            infoRep = new InformationReporter<{
+                                folders: number;
+                                additions: number;
+                                status: string;
+                            }>(
+                                { folders: 0, additions: 0, status: '' },
+                                (info: {
+                                    folders: number;
+                                    additions: number;
+                                    status: string;
+                                }) => {
+                                    if (info.status == 'Scanning folders') {
+                                        infoTextElement.innerText = `
+                                    🞄 ${info.folders} folders processed
+                                    🞄 ${info.additions} additions found
+                              `;
+                                    } else {
+                                        infoTextElement.innerText = '\n🞄 ' + info.status;
+                                    }
+                                }
+                            );
+                            this.libraries
+                                .scanLibraryDelta(item, infoRep)
+                                .then((deltaLibrary: BTGlobalTreeNodeInfo) => {
+                                    if (
+                                        deltaLibrary === undefined ||
+                                        deltaLibrary === null
+                                    ) {
+                                        deltaLibrary = undefined;
+                                    } else {
+                                        this.preferences.addMagicNode(
+                                            deltaLibrary,
+                                            'library'
+                                        );
+                                    }
+                                    console.log('Scanning ended');
+                                    //setTimeout so user can see status
+                                    setTimeout(() => {
+                                        optionElement.removeChild(infoTextElement);
+                                        this.hideActionMenu();
+                                        this.setInProgress(false);
+                                        if (deltaLibrary !== undefined)
+                                            this.gotoFolder(deltaLibrary);
+                                    }, 1000);
+                                })
+                                .catch((error) => {
+                                    console.warn(error);
+                                });
                         };
                         break;
                     }
@@ -1975,9 +2215,9 @@ export class App extends BaseApp {
      * @returns Array of BTDocumentElementInfo
      */
 
-    public showChangeMenu(library: BTGlobalTreeNodeInfo) {
-        this.libraries.scanLibraryDelta(library);
-    }
+    // public showChangeMenu(library: BTGlobalTreeNodeInfo) {
+    //     this.libraries.scanLibraryDelta(library);
+    // }
 
     public createChangeMenu(parent: HTMLElement): void {
         const changeMenuMainDiv = createDocumentElement('div', {
@@ -2271,7 +2511,8 @@ export class App extends BaseApp {
         itemRaw: BTDocumentSummaryInfo,
         renderIndex: number,
         parentElement: HTMLElement,
-        clearParentElement: boolean
+        clearParentElement: boolean,
+        accessId: string
     ): void {
         this.resolveDocumentVersion(itemRaw).then((item) => {
             this.getInsertChoices(item, this.targetDocumentElementInfo.elementType).then(
@@ -2289,6 +2530,7 @@ export class App extends BaseApp {
                                 res,
                                 itemRaw,
                                 renderIndex,
+                                accessId,
                                 undefined,
                                 clearParentElement
                             );
@@ -2310,6 +2552,7 @@ export class App extends BaseApp {
                             res,
                             itemRaw,
                             renderIndex,
+                            accessId,
                             undefined,
                             clearParentElement
                         );
@@ -2388,6 +2631,7 @@ export class App extends BaseApp {
         items: BTInsertableInfo[],
         nodeInfo: BTGlobalTreeMagicNodeInfo,
         renderIndex: number,
+        accessId: string,
         parentElement?: HTMLElement,
         clearParentElement?: boolean,
         pruneDocumentInfo?: boolean
@@ -2398,6 +2642,8 @@ export class App extends BaseApp {
             uiDiv = document.body;
         }
         if (clearParentElement) {
+            accessId = crypto.randomUUID();
+            uiDiv['data-accessid'] = accessId;
             uiDiv.innerHTML = '';
         }
         this.hidePopup();
@@ -2501,6 +2747,7 @@ export class App extends BaseApp {
                     nodeInfo
                 );
             }
+            if (uiDiv['data-accessid'] !== accessId) return;
             // Now we need to output the actual item.
             const childContainerDiv = createDocumentElement('div', {
                 class: 'select-item-dialog-item-row child-item-container os-selectable-item',
@@ -2908,6 +3155,10 @@ export class App extends BaseApp {
         return result;
     }
 
+    public validAccessId(accessId: string): boolean {
+        return accessId === document.getElementById('dump')['data-accessid'];
+    }
+
     /**
      * Process and save a recently inserted item for Recently Inserted
      * @param item Document element to save
@@ -3189,7 +3440,11 @@ export class App extends BaseApp {
             element.classList.remove('waiting');
         }
     }
-    public processLibrariesNode(index?: number, refreshNodes?: boolean) {
+    public processLibrariesNode(
+        accessId: string,
+        index?: number,
+        refreshNodes?: boolean
+    ) {
         this.preferences
             .getMagicTypeByIndex(index, 'library', refreshNodes) //only refresh if we are getting first node
             .then((res: BTGlobalTreeNodeInfo[]) => {
@@ -3211,14 +3466,18 @@ export class App extends BaseApp {
                     href: undefined,
                     items: res,
                 };
-                this.ProcessNodeResults(recentNode, undefined, false);
+                this.ProcessNodeResults(recentNode, accessId, undefined, false);
             });
     }
     /**
      * Process the results of the recently inserted node
      * @param index what index recently inserted node it should fetch and process
      */
-    public processFavoritedNode(index?: number, refreshNodes?: boolean) {
+    public processFavoritedNode(
+        accessId: string,
+        index?: number,
+        refreshNodes?: boolean
+    ) {
         this.preferences
             .getMagicTypeByIndex(index, 'favorited', refreshNodes) //only refresh if we are getting first node
             .then((res: BTGlobalTreeNodeInfo[]) => {
@@ -3240,14 +3499,18 @@ export class App extends BaseApp {
                     href: undefined,
                     items: res,
                 };
-                this.ProcessNodeResults(recentNode, undefined, true);
+                this.ProcessNodeResults(recentNode, accessId, undefined, true);
             });
     }
     /**
      * Process the results of the recently inserted node
      * @param index what index recently inserted node it should fetch and process
      */
-    public processRecentlyInsertedNode(index?: number, refreshNodes?: boolean) {
+    public processRecentlyInsertedNode(
+        accessId: string,
+        index?: number,
+        refreshNodes?: boolean
+    ) {
         this.preferences
             .getMagicTypeByIndex(index, 'recentlyInserted', refreshNodes) //only refresh if we are getting first node
             .then((res: BTGlobalTreeNodeInfo[]) => {
@@ -3269,7 +3532,7 @@ export class App extends BaseApp {
                     href: undefined,
                     items: res,
                 };
-                this.ProcessNodeResults(recentNode, undefined, true);
+                this.ProcessNodeResults(recentNode, accessId, undefined, true);
             });
     }
 
@@ -3277,8 +3540,11 @@ export class App extends BaseApp {
      * Process the results of the global libraries node
      * @param index what index global library node it should fetch and process
      */
-    public processGlobalLibrariesNode(index?: number, refreshNodes?: boolean) {
-        this.preferences;
+    public processGlobalLibrariesNode(
+        accessId: string,
+        index?: number,
+        refreshNodes?: boolean
+    ) {
         const documentRequests: Promise<BTGlobalTreeNodeInfo>[] = [];
         for (let did of this.globalLibrariesNodes) {
             documentRequests.push(this.onshape.documentApi.getDocument({ did }));
@@ -3303,7 +3569,38 @@ export class App extends BaseApp {
                 href: undefined,
                 items: documents,
             };
-            this.ProcessNodeResults(recentNode, undefined, true);
+            this.ProcessNodeResults(recentNode, accessId, undefined, true);
+        });
+        // .getMagicTypeByIndex(index, 'globalLibraries', refreshNodes) //only refresh if we are getting first node
+        // .then((res: BTGlobalTreeNodeInfo[]) => {
+
+        // });
+    }
+    /**
+     * Process the results of the global libraries node
+     * @param index what index global library node it should fetch and process
+     */
+    public processHelpInstructionsNode(
+        accessId: string,
+        index?: number,
+        refreshNodes?: boolean
+    ) {
+        const pathToRoot = [
+            {
+                jsonType: 'magic',
+                resourceType: 'magic',
+                id: 'HI',
+                name: 'Help/Instructions',
+            },
+        ];
+        this.setBreadcrumbs(pathToRoot);
+        // if (res === undefined || res === null) {
+        //     return;
+        // }
+        //fetch md file
+        fetch('./' + this.appName + '/INSTRUCTIONS_HELP.md').then((res) => {
+            if (res === undefined) return;
+            res.text().then((res2) => this.processMarkdownFile(res2, accessId));
         });
         // .getMagicTypeByIndex(index, 'globalLibraries', refreshNodes) //only refresh if we are getting first node
         // .then((res: BTGlobalTreeNodeInfo[]) => {
@@ -3314,18 +3611,22 @@ export class App extends BaseApp {
      * Process a single node entry
      * @param uri URI node for the entries to be loaded
      */
-    public processMagicNode(magic: string) {
+    public processMagicNode(magic: string, accessId: string) {
         if (magic === 'RI') {
-            this.processRecentlyInsertedNode(0, true);
+            this.processRecentlyInsertedNode(accessId, 0, true);
             return;
         } else if (magic === 'FV') {
-            this.processFavoritedNode(0, true);
+            this.processFavoritedNode(accessId, 0, true);
             return;
         } else if (magic === 'LI') {
-            this.processLibrariesNode(0, true);
+            this.processLibrariesNode(accessId, 0, true);
             return;
         } else if (magic === 'GL') {
-            this.processGlobalLibrariesNode(0, true);
+            this.processGlobalLibrariesNode(accessId, 0, true);
+            return;
+        } else if (magic === 'HI') {
+            this.processHelpInstructionsNode(accessId);
+            return;
         }
         // uri: string) {
         // Get Onshape to return the list
@@ -3352,7 +3653,7 @@ export class App extends BaseApp {
             })
             .then((res) => {
                 this.setBreadcrumbs(res.pathToRoot);
-                this.ProcessNodeResults(res);
+                this.ProcessNodeResults(res, accessId);
             })
             .catch((err) => {
                 // Something went wrong, some mark us as no longer running.
@@ -3361,6 +3662,7 @@ export class App extends BaseApp {
     }
     public processNextNodes(
         info: BTGlobalTreeNodesInfo,
+        accessId: string,
         teamroot?: BTGlobalTreeNodeInfo
     ): void {
         switch (info.pathToRoot[0].resourceType) {
@@ -3368,17 +3670,17 @@ export class App extends BaseApp {
                 this.onshape
                     .OnshapeRequest(info.next, BTGlobalTreeNodesInfoFromJSON)
                     .then((res: BTGlobalTreeNodesInfo) => {
-                        this.ProcessNodeResults(res, teamroot);
+                        this.ProcessNodeResults(res, accessId, teamroot);
                     });
                 break;
             }
             case 'magic': {
                 if (info.pathToRoot[0].id === 'RI') {
-                    this.processRecentlyInsertedNode(parseInt(info.next));
+                    this.processRecentlyInsertedNode(accessId, parseInt(info.next));
                 } else if (info.pathToRoot[0].id === 'FV') {
-                    this.processFavoritedNode(parseInt(info.next));
+                    this.processFavoritedNode(accessId, parseInt(info.next));
                 } else if (info.pathToRoot[0].id === 'LI') {
-                    this.processLibrariesNode(parseInt(info.next));
+                    this.processLibrariesNode(accessId, parseInt(info.next));
                 }
                 break;
             }
@@ -3392,17 +3694,20 @@ export class App extends BaseApp {
      */
     public ProcessNodeResults(
         info: BTGlobalTreeNodesInfo,
+        accessId: string,
         teamroot?: BTGlobalTreeNodeInfo,
         subsetConfigurables?: boolean
     ) {
         console.log(info);
+        if (this.validAccessId(accessId) === false) return;
         const nodes = info as BTGlobalTreeNodesInfo;
         // When it does, append all the elements to the UI
         this.appendElements(
             nodes.items,
             info.pathToRoot[0],
             teamroot,
-            subsetConfigurables
+            subsetConfigurables,
+            accessId
         );
         // Do we have any more in the list and are we under the limit for the UI
         if (
@@ -3410,6 +3715,7 @@ export class App extends BaseApp {
             info.next !== undefined &&
             this.loaded < this.loadedlimit
         ) {
+            if (this.validAccessId(accessId) === false) return;
             // We have more entries, so lets put a little "Loading More..." element at the
             // end of the list.  When it becomes visible because they scrolled down or because there
             // is more room on the screen, we will delete that Loading More element and then process
@@ -3431,7 +3737,7 @@ export class App extends BaseApp {
                     if (entry[0].isIntersecting) {
                         observer.disconnect();
                         rowelem.remove();
-                        this.processNextNodes(info, teamroot);
+                        this.processNextNodes(info, accessId, teamroot);
                     }
                 },
                 { threshold: [0] }
@@ -3439,6 +3745,29 @@ export class App extends BaseApp {
             observer.observe(rowelem);
         }
     }
+
+    public processMarkdownFile(content: string, accessId: string) {
+        if (this.validAccessId(accessId) === false) return;
+
+        const uiDiv = document.getElementById('dump');
+        const container = createDocumentElement('div', {});
+        const style = '<style scoped>li{list-style:number}</style>';
+
+        const html = marked.parse(content);
+        if (html instanceof Promise) {
+            html.then((res) => {
+                if (this.validAccessId(accessId) === false) return;
+                uiDiv.innerHTML = '';
+                container.innerHTML = style + res;
+                uiDiv.appendChild(container);
+            });
+        } else {
+            uiDiv.innerHTML = '';
+            container.innerHTML = style + html;
+            uiDiv.appendChild(container);
+        }
+    }
+
     /**
      * Navigate into a folder and populate the UI with the contents
      * @param item Entry to be processed
@@ -3446,6 +3775,7 @@ export class App extends BaseApp {
      */
     public gotoFolder(item: BTGlobalTreeNodeInfo, teamroot?: BTGlobalTreeNodeInfo): void {
         console.log(item);
+
         this.hidePopup();
         this.hideActionMenu();
 
@@ -3454,9 +3784,12 @@ export class App extends BaseApp {
 
         // Clean up the UI so we can populate it with new entries
         let dumpNodes = document.getElementById('dump');
+        let accessId = crypto.randomUUID();
         if (dumpNodes !== null) {
             dumpNodes.innerHTML = '';
+            dumpNodes['data-accessid'] = accessId;
         } else {
+            console.warn('why does this happen');
             dumpNodes = document.body;
         }
         const container = this.getFileListContainer();
@@ -3481,7 +3814,7 @@ export class App extends BaseApp {
                         res.pathToRoot[0].jsonType = 'team-summary'; //fix pathToRoot because it has all the right information except jsonType
                     }
                     this.setBreadcrumbs(res.pathToRoot, item);
-                    this.ProcessNodeResults(res, item);
+                    this.ProcessNodeResults(res, accessId, item);
                 })
                 .catch((err) => {
                     // Something went wrong, some mark us as no longer running.
@@ -3500,6 +3833,7 @@ export class App extends BaseApp {
                             items: res.contents,
                             pathToRoot: this.currentBreadcrumbs,
                         },
+                        accessId,
                         teamroot
                     );
                 })
@@ -3508,7 +3842,7 @@ export class App extends BaseApp {
                         //User should delete library
                         dumpNodes.innerText =
                             'Library does not exist\nPlease recover it or remove this library';
-                        this.processMagicNode(this.currentBreadcrumbs[0].id);
+                        this.processMagicNode(this.currentBreadcrumbs[0].id, accessId);
                     }
                 });
         } else if (item.jsonType === 'proxy-folder') {
@@ -3525,6 +3859,7 @@ export class App extends BaseApp {
                                 items: res,
                                 pathToRoot: this.currentBreadcrumbs,
                             },
+                            accessId,
                             teamroot
                         );
                     });
@@ -3533,7 +3868,7 @@ export class App extends BaseApp {
         } else if (item.jsonType === 'home') {
             this.processHome(dumpNodes);
         } else if (item.jsonType === 'magic' || item.resourceType === 'magic') {
-            this.processMagicNode(item.id);
+            this.processMagicNode(item.id, accessId);
         } else {
             console.log('generic folder', item);
             this.onshape.globalTreeNodesApi
@@ -3551,7 +3886,7 @@ export class App extends BaseApp {
                     this.addBreadcrumbNode(
                         (res && res.pathToRoot && res.pathToRoot[0]) || item
                     );
-                    this.ProcessNodeResults(res, teamroot);
+                    this.ProcessNodeResults(res, accessId, teamroot);
                 })
                 .catch((err) => {
                     // Something went wrong, some mark us as no longer running.

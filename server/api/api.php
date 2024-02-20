@@ -131,7 +131,8 @@ $err = curl_error($ch);
 // Dump out the headers so we can confirm what we asked for
 $headers = curl_getinfo($ch, CURLINFO_HEADER_OUT);
 oalog("HEADERS:\n".$headers."\n");
-oalog("TIME:\n".date("h:i:sa"));
+oalog("TIME:\n".date("h:i:sa")."\n");
+$start_time = microtime(true);
 
 // Log what we got back
 $limit = strlen($response);
@@ -144,7 +145,7 @@ for ($i = 0; $i < $limit; $i++) {
 }
 
 oalog("RESPONSE:\n".$out."\nERR: ".$err."\n");
-
+oalog("Timing".(round(microtime(true)-$start_time,2)*1000));
 // Log all the information about the request/response
 $info = curl_getinfo($ch);
 oalog("INFO:\n".print_r($info, true));

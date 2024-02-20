@@ -90,6 +90,7 @@ export class Preferences {
      */
     public onshape: OnshapeAPI;
     public userPreferencesInfo: BTGlobalTreeProxyInfo = undefined;
+    public newUser: boolean = false;
 
     //magic nodes cache for getting by index
     magicNodes: { [name: string]: BTGlobalTreeNodeInfo[] } = {
@@ -118,6 +119,7 @@ export class Preferences {
      */
     public initUserPreferences(appName: string): Promise<BTGlobalTreeProxyInfo> {
         // matches the app name.
+        this.newUser = false;
         return new Promise((resolve, _reject) => {
             this.getPreferencesDoc()
                 .then((res) => {
@@ -573,6 +575,7 @@ export class Preferences {
      */
     public getAppJson(libInfo: BTGlobalTreeProxyInfo): Promise<JSON> {
         return new Promise((resolve, _reject) => {
+            if(libInfo.wvmid === undefined || libInfo.wvmid === null)return console.error("NO WVMID", libInfo)
             this.onshape.blobElementApi
                 .downloadFileWorkspace({
                     did: libInfo.id,
@@ -584,6 +587,7 @@ export class Preferences {
                     resolve(resJson);
                 })
                 .catch((err) => {
+                    console.warn(err);
                     resolve({} as JSON);
                 });
         });
@@ -723,7 +727,7 @@ export class Preferences {
         return new Promise((resolve, reject) => {
             if (res.items.length > 0) {
                 this.userPreferencesInfo = BTGlobalTreeProxyInfoJSONTyped(
-                    { id: res.items[0].id },
+                    { id: res.items[0].id, owner: res.items[0].owner },
                     true
                 );
 
@@ -753,6 +757,7 @@ export class Preferences {
                         console.log(
                             'Created new preferences document since it did not exist.'
                         );
+                        this.newUser = true;
                         this.userPreferencesInfo = BTGlobalTreeProxyInfoJSONTyped(
                             {
                                 id: res.id,
