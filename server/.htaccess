@@ -15,7 +15,7 @@ RewriteRule ^.*/confirm_access/(.*)$ https://oauth.onshape.com/oauth/confirm_acc
 </ifModule>
 
 
-<FilesMatch "\.(htm|html|php)$">
+<FilesMatch "\.(htm|html|php|md)$">
     <IfModule mod_expires.c>
         ExpiresActive Off
     </IfModule>

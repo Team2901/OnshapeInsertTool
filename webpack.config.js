@@ -121,6 +121,12 @@ config = {
             template: path.join(__dirname, 'app', 'index.html'),
             title: 'Onshape Oauth Example',
         }),
+        new HtmlWebpackPlugin({
+          inject: false,
+          filename: 'INSTRUCTIONS_HELP.md',
+          template: path.join(__dirname, 'app', 'INSTRUCTIONS_HELP.md'),
+          title: 'Instructions and Help file',
+      }),
     ],
 };
 
