@@ -149,10 +149,12 @@ export class App extends BaseApp {
 
     private globalLibrariesNodes: string[] = [
         'f3b99a8450b4f983b1efa03c', //Pitsco
-        '65d1b86ea725f780582d9dd0', //GoBilda
+        '65d1b86ea725f780582d9dd0', //GoBILDA
         '2fd951db6d0261aba5f16a5d', //AndyMark
         '1348b49fc35396eed14d589b', //ServoCity
         'b71490095d0a6e87f29c4975', //REV Robotics
+        'f4aa6bf18a572782640d6476', //Modern Robotics
+        'ef69c7f97eac419fe24faf1d', //Other Robotics Vendors
     ];
 
     public magicInfo: { [item: string]: magicIconInfo } = {
@@ -1874,6 +1876,7 @@ export class App extends BaseApp {
                                             .then(() => {
                                                 this.setInProgress(false);
                                                 this.hideActionMenu();
+                                                this.gotoFolder(this.currentBreadcrumbs[0])
                                             });
                                     } else {
                                         console.warn(res);
@@ -2812,7 +2815,7 @@ export class App extends BaseApp {
      * @returns BTInsertableInfo with deterministicId filled in
      */
     public async findDeterministicPartId(
-        item: BTInsertableInfo
+         item: BTInsertableInfo
     ): Promise<BTInsertableInfo> {
         return new Promise((resolve, _reject) => {
             // Make sure we have to do some work (if it isn't a part or we already know the id, get out of here)
@@ -3173,7 +3176,7 @@ export class App extends BaseApp {
         // this.currentNodes.items.forEach((nodeItem: BTGlobalTreeNodeInfo)=>{
         //   if(nodeItem.id == item.documentId)return documentNodeInfo = nodeItem;
         // })
-        if (insertInfo.configList && insertInfo.configList.length > 0) {
+        if (insertInfo !== undefined && insertInfo !== null && insertInfo.configList && insertInfo.configList.length > 0) {
             //Document has configurations
             const documentNodeInfoConfig: BTGlobalTreeNodeMagicDataInfo =
                 documentNodeInfo as BTGlobalTreeNodeMagicDataInfo;
@@ -3185,7 +3188,7 @@ export class App extends BaseApp {
 
             this.preferences.addMagicNode(documentNodeInfoConfig, 'recentlyInserted');
         } else {
-            this.preferences.removeMagicNode(
+            this.preferences.addMagicNode(
                 documentNodeInfo as BTGlobalTreeNodeInfo,
                 'recentlyInserted'
             );
@@ -3424,7 +3427,7 @@ export class App extends BaseApp {
                 // TODO: Figure out why we don't get any output when it actually succeeds
                 // post request returns undefined instead of {}
                 if (reason.message !== 'Unexpected end of JSON input') {
-                    console.log(`failed to create reason=${reason}`);
+                    console.log("failed to create reason=", reason);
                 }
             });
     }
@@ -3750,20 +3753,19 @@ export class App extends BaseApp {
         if (this.validAccessId(accessId) === false) return;
 
         const uiDiv = document.getElementById('dump');
-        const container = createDocumentElement('div', {});
-        const style = '<style scoped>li{list-style:number}</style>';
+        const container = createDocumentElement('div', {class: 'markdown-body'});
 
         const html = marked.parse(content);
         if (html instanceof Promise) {
             html.then((res) => {
                 if (this.validAccessId(accessId) === false) return;
                 uiDiv.innerHTML = '';
-                container.innerHTML = style + res;
+                container.innerHTML = res;
                 uiDiv.appendChild(container);
             });
         } else {
             uiDiv.innerHTML = '';
-            container.innerHTML = style + html;
+            container.innerHTML = html;
             uiDiv.appendChild(container);
         }
     }

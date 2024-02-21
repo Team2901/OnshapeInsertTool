@@ -1,8 +1,3 @@
-import {
-    BTGlobalTreeMagicNodeInfo,
-    BTGlobalTreeNodeInfo,
-} from 'onshape-typescript-fetch';
-
 class TaskProcessingUnit<T, GT> {
     private threads: [T[]];
 

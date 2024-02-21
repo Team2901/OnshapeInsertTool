@@ -881,7 +881,7 @@ export class Library extends Preferences {
                     library: BTGlobalTreeNodeInfo;
                     descendantArray: BTGlobalTreeNodeInfo[];
                 }
-            >(200);
+            >(16);
             let notPublics = [];
             TPU.setGlobalTaskInfo({ library, descendantArray: [] });
             TPU.setProcessingFunction((taskInfo, addTask, globalTaskInfo) => {
@@ -923,7 +923,7 @@ export class Library extends Preferences {
                     this.proxyDescendantName,
                     TPU.globalTaskInfo.descendantArray
                 );
-                console.log(notPublics);
+                console.log(notPublics)
                 console.log(TPU.globalTaskInfo.descendantArray);
                 console.log(TPU.globalTaskInfo.descendantArray.length + ' descendants');
                 resolve();
