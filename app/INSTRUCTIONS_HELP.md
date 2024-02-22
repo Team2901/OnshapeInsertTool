@@ -9,7 +9,7 @@ The home menu is the default menu which lets users use Insert Tool specific feat
    2. Favorited - users can add and remove documents to and from here for quick access.
    3. Recently Inserted - Documents that the user inserts will appear here with the most recent at the top.
    4. Global Libraries - Users can access global libraries from the FTC Parts Users Library WITHOUT being a member of the teams. This includes ServoCity, GoBilda, Andy Mark, ServoCity, and Rev Robotics.
-   5. Recently Opened - Users can views their recently opened documents here. Note: this is the same as Onshape's recently inserted section.
+   5. Recently Opened - Users can views their recently opened documents here. Note: this is the same as Onshape's recently opened section.
    6. Help/Instructions - The current page. Details instructions and help on Insert Tool app usage.
 
   - **Onshape Features**
