@@ -366,14 +366,19 @@ export class Preferences {
         return new Promise(async (resolve, reject) => {
             if (refreshNodeResults === true) {
                 const result = await this.getAllOfMagicType(magicType, libInfo);
-                if (result === undefined || result.length === 0) {
+                console.log('getting magic nodes', result);
+                if (result === undefined) {
                     this.magicNodes[magicType] = [];
-                    resolve(undefined);
+                }
+                if (result.length === 0) {
+                    resolve([
+                        { jsonType: 'no-content', name: 'No documents or folders here.' },
+                    ]);
                 }
                 this.magicNodes[magicType] = result;
             }
             const currentNodes = this.magicNodes[magicType];
-            if (index >= currentNodes.length) {
+            if (index >= currentNodes.length || index < 0) {
                 resolve(undefined);
             }
             resolve([currentNodes[index]]);
@@ -449,7 +454,7 @@ export class Preferences {
     //     });
     // }
     /**
-     * 
+     *
      * @param libInfo library object with element id to save to
      * @param info object with {pref_name: array} for multiple entries
      */
@@ -458,7 +463,7 @@ export class Preferences {
         info: { [pref_name: string]: BTGlobalTreeNodeInfo[] }
     ): Promise<boolean>;
     /**
-     * 
+     *
      * @param libInfo library object with element id to save to
      * @param pref_name  key to save the array under
      * @param array Array to save - Array of BTGlobalTreeNodeInfo representing the full path to the location
@@ -480,7 +485,7 @@ export class Preferences {
     ): Promise<boolean> {
         let info: { [pref_name: string]: Array<BTGlobalTreeNodeInfo> } = {};
         if (typeof param2 === 'string') {
-            //param2 is 
+            //param2 is
             info[param2] = param3;
         } else {
             info = param2;
@@ -575,7 +580,8 @@ export class Preferences {
      */
     public getAppJson(libInfo: BTGlobalTreeProxyInfo): Promise<JSON> {
         return new Promise((resolve, _reject) => {
-            if(libInfo.wvmid === undefined || libInfo.wvmid === null)return console.error("NO WVMID", libInfo)
+            if (libInfo.wvmid === undefined || libInfo.wvmid === null)
+                return console.error('NO WVMID', libInfo);
             this.onshape.blobElementApi
                 .downloadFileWorkspace({
                     did: libInfo.id,
