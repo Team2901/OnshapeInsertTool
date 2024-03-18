@@ -290,6 +290,9 @@ export class BaseApp {
         div.append(h2);
         div.appendChild(p);
         this.setAppElements(div);
+        console.group('App failed: ' + reason);
+        console.trace();
+        console.groupEnd();
     }
     /**
      * The main initialization routine.  This is invoked once the web page is initially loaded
