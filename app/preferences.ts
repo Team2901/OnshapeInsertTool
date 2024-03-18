@@ -754,21 +754,25 @@ export class Preferences {
                 this.onshape.documentApi
                     .createDocument({
                         bTDocumentParams: {
-                            ownerId: this.onshape.userId,
+                            // ownerId: this.onshape.userId,
                             name: '⚙ Preferences ⚙',
                             description: 'Document used to store application preferences',
                         },
                     })
-                    .then((res) => {
+                    .then((res2) => {
+                        if(res2 === undefined || res2 === null)console.error("Unable to create preferences document");
+
                         console.log(
-                            'Created new preferences document since it did not exist.'
+                            'Created new preferences document since it did not exist.',
+                            res2
                         );
                         this.newUser = true;
                         this.userPreferencesInfo = BTGlobalTreeProxyInfoJSONTyped(
                             {
-                                id: res.id,
-                                wvmid: res.defaultWorkspace.id,
+                                id: res2.id,
+                                wvmid: res2.defaultWorkspace.id,
                                 wvm: GetAssociativeDataWvmEnum['w'],
+                                owner: res2.owner,
                             },
                             true
                         );

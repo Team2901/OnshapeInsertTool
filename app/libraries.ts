@@ -21,6 +21,7 @@ export class Library extends Preferences {
     proxyChildrenName = SPECIALCHAR + 'children' + SPECIALCHAR;
     proxyDescendantName = SPECIALCHAR + 'descendant' + SPECIALCHAR;
     proxyParentFolder = SPECIALCHAR + 'parentfolder' + SPECIALCHAR;
+    searchInfoName = SPECIALCHAR + 'searchinfo' + SPECIALCHAR;
     rawLibraryName = "︴RAW DON'T RENAME︴";
     libraryDifferenceName = 'Difference(You can delete)';
 
@@ -871,7 +872,11 @@ export class Library extends Preferences {
             });
         });
     }
-
+    /**
+     * Updates library descendants and returns an array of {Vendor, Part#?, Name}
+     * @param library
+     * @returns
+     */
     public refactorProxyLibrary(library: BTGlobalTreeNodeInfo): Promise<void> {
         console.log('cloning refactoring', arguments);
         return new Promise((resolve, reject) => {
@@ -880,16 +885,18 @@ export class Library extends Preferences {
                 {
                     library: BTGlobalTreeNodeInfo;
                     descendantArray: BTGlobalTreeNodeInfo[];
+                    partSearchArray: Array<{ name: String; id: String; vendor?: String }>;
                 }
             >(16);
             let notPublics = [];
-            TPU.setGlobalTaskInfo({ library, descendantArray: [] });
+            TPU.setGlobalTaskInfo({ library, descendantArray: [], partSearchArray: [] });
             TPU.setProcessingFunction((taskInfo, addTask, globalTaskInfo) => {
                 return new Promise((resolve2, reject2) => {
                     this.refactorFolder(
                         taskInfo.folder,
                         globalTaskInfo.library,
                         globalTaskInfo.descendantArray,
+                        globalTaskInfo.partSearchArray,
                         (folder: BTGlobalTreeNodeInfo) => {
                             addTask({ folder });
                         }
@@ -923,7 +930,12 @@ export class Library extends Preferences {
                     this.proxyDescendantName,
                     TPU.globalTaskInfo.descendantArray
                 );
-                console.log(notPublics)
+                this.setLibrarySearchInfo(
+                    TPU.globalTaskInfo.partSearchArray as BTGlobalTreeNodeInfo[],
+                    library,
+                    undefined
+                );
+                console.log(notPublics);
                 console.log(TPU.globalTaskInfo.descendantArray);
                 console.log(TPU.globalTaskInfo.descendantArray.length + ' descendants');
                 resolve();
@@ -1130,6 +1142,12 @@ export class Library extends Preferences {
         folder: BTGlobalTreeNodeInfo,
         library: BTGlobalTreeNodeInfo,
         descendantArray?: BTGlobalTreeNodeInfo[],
+        partSearchArray?: Array<{
+            name: String;
+            id: String;
+            vendor?: String;
+            partNumber?: String;
+        }>,
         recurseOnFolder: Function = this.refactorFolder
     ): Promise<BTGlobalTreeNodeInfo[]> {
         // console.log('cloning refactoring', arguments);
@@ -1146,7 +1164,6 @@ export class Library extends Preferences {
             getChildrenPromise
                 .then((children) => {
                     if (children === undefined || children === null) {
-                        console.log('))))))))(((((((((((((', folder);
                         return resolve(undefined);
                     }
                     // console.log('iterating folder ', folder, ' and children', children);
@@ -1156,11 +1173,26 @@ export class Library extends Preferences {
                             descendantArray.push(child);
                             recurseOnFolder(child, library, descendantArray);
                         }
-                        if (
-                            child.jsonType === 'document-summary' &&
-                            child['_public'] === false
-                        ) {
-                            notPublic.push(child);
+                        if (child.jsonType === 'document-summary') {
+                            let partNumber: String = '';
+                            if (
+                                child.description !== undefined &&
+                                child.description !== ''
+                            ) {
+                                let matches = / ([0-9,-]+)\n/gm.exec(child.description);
+                                if (
+                                    matches !== null &&
+                                    matches !== undefined &&
+                                    matches[1]
+                                )
+                                    partNumber = matches[1];
+                            }
+                            partSearchArray.push({
+                                name: child.name,
+                                id: child.id,
+                                partNumber,
+                            });
+                            if (child['_public'] === false) notPublic.push(child);
                         }
                     });
                     resolve(notPublic);
@@ -1173,19 +1205,19 @@ export class Library extends Preferences {
         });
     }
 
-    refactorLibrary(library: BTGlobalTreeNodeInfo): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.getProxyLibrary(undefined, library.id).then((res) => {
-                library = res.library;
-                const descendantArray = [];
-                this.refactorFolder(library, library, descendantArray).then(() => {
-                    console.log(descendantArray);
-                    this.setBTGArray(library, this.proxyDescendantName, descendantArray);
-                    resolve();
-                });
-            });
-        });
-    }
+    // refactorLibrary(library: BTGlobalTreeNodeInfo): Promise<void> {
+    //     return new Promise((resolve, reject) => {
+    //         this.getProxyLibrary(undefined, library.id).then((res) => {
+    //             library = res.library;
+    //             const descendantArray = [];
+    //             this.refactorFolder(library, library, descendantArray).then(() => {
+    //                 console.log(descendantArray);
+    //                 this.setBTGArray(library, this.proxyDescendantName, descendantArray);
+    //                 resolve();
+    //             });
+    //         });
+    //     });
+    // }
 
     public scanFolderDelta(
         folder: BTGlobalTreeNodeInfo,
@@ -1276,24 +1308,44 @@ export class Library extends Preferences {
         });
     }
 
-    public applyFolderDelta(deltaArray: deltaInfo[], library: BTGlobalTreeNodeInfo) {
-        deltaArray.forEach((delta) => {
-            if (delta.type === 'proxy-void') {
-                // check if parent is library
-                //add node to proxy library
-                //add node to proxy folder
-            }
+    public getLibrarySearchInfo(libraryId: string): Promise<BTGlobalTreeNodeInfo[]> {
+        return new Promise((resolve, reject) => {
+            this.getProxyLibrary(undefined, libraryId).then((res) => {
+                if (res === undefined) return resolve(undefined);
+                let { library } = res;
+                this.getAppElement(this.searchInfoName, library).then((res) => {
+                    if (res === undefined) resolve(undefined);
+                    this.getBTGArray('all', library).then((res) => {
+                        resolve(res);
+                    });
+                });
+            });
         });
     }
-
-    // scanLibraryDelta(library: BTGlobalTreeNodeInfo): Promise<Array<deltaInfo>> {
-    //     return new Promise((resolve, reject) => {
-    //         const deltaArray = [];
-    //         this.scanFolderDelta(library, library, deltaArray).then(() => {
-    //             resolve(deltaArray);
-    //         });
-    //     });
-    // }
+    public setLibrarySearchInfo(
+        info: BTGlobalTreeNodeInfo[],
+        library?: BTGlobalTreeNodeInfo,
+        libraryId?: string
+    ): Promise<boolean> {
+        return new Promise((resolve, reject) => {
+            if (library === undefined && libraryId === undefined)
+                return reject('Either library or libraryId must be passed in.');
+            const getLibrary =
+                library !== undefined
+                    ? new Promise((res) => res({ library: Object.assign({}, library) }))
+                    : this.getProxyLibrary(undefined, libraryId);
+            getLibrary.then((res: { library: BTGlobalTreeNodeInfo }) => {
+                if (res === undefined) resolve(undefined);
+                library = res.library;
+                this.getAppElement(this.searchInfoName, library).then((res) => {
+                    if (res === undefined) resolve(undefined);
+                    this.setBTGArray(library, 'all', info).then((res2) => {
+                        resolve(res2);
+                    });
+                });
+            });
+        });
+    }
 
     /*********************************************************************************
      *                         PROXY LIBRARY/FOLDER ROUTINES                         *
