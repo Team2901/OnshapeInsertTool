@@ -949,7 +949,18 @@ export class App extends BaseApp {
             textCol.appendChild(docName);
             rowelem.appendChild(textCol);
 
-            rowelem.onmouseover = () => {
+            if (item.jsonType === 'no-content') {
+                selectable = false;
+                container.appendChild(rowContainer);
+                rowelem.style.justifyContent = 'center';
+                rowelem.style.cursor = 'default';
+                rowelem.style.marginTop = '10%';
+                rowelem.style.userSelect = 'none';
+                rowelem.classList.remove('os-selectable-item');
+                return;
+            }
+
+            rowelem.onmouseover = (e) => {
                 waitForTooltip(
                     rowelem,
                     () => {
@@ -1001,7 +1012,6 @@ export class App extends BaseApp {
                             res,
                             item,
                             lastLoaded,
-                            accessId,
                             rowContainer,
                             false,
                             true
@@ -1770,13 +1780,15 @@ export class App extends BaseApp {
                                     libraries.forEach((library) => {
                                         libraryOptions.push({
                                             id: library.id,
-                                            label: this.libraries.decodeLibraryName(library.name),
+                                            label: this.libraries.decodeLibraryName(
+                                                library.name
+                                            ),
                                         });
                                     });
                                     this.updateActionMenuInputOptions(
-                                      inputLibElement.id,
-                                      libraryOptions
-                                  );
+                                        inputLibElement.id,
+                                        libraryOptions
+                                    );
                                 });
                             inputLibElement.onchange = () => {
                                 selectedLibrary = undefined;
@@ -1876,7 +1888,9 @@ export class App extends BaseApp {
                                             .then(() => {
                                                 this.setInProgress(false);
                                                 this.hideActionMenu();
-                                                this.gotoFolder(this.currentBreadcrumbs[0])
+                                                this.gotoFolder(
+                                                    this.currentBreadcrumbs[0]
+                                                );
                                             });
                                     } else {
                                         console.warn(res);
@@ -2533,7 +2547,6 @@ export class App extends BaseApp {
                                 res,
                                 itemRaw,
                                 renderIndex,
-                                accessId,
                                 undefined,
                                 clearParentElement
                             );
@@ -2555,7 +2568,6 @@ export class App extends BaseApp {
                             res,
                             itemRaw,
                             renderIndex,
-                            accessId,
                             undefined,
                             clearParentElement
                         );
@@ -2634,7 +2646,6 @@ export class App extends BaseApp {
         items: BTInsertableInfo[],
         nodeInfo: BTGlobalTreeMagicNodeInfo,
         renderIndex: number,
-        accessId: string,
         parentElement?: HTMLElement,
         clearParentElement?: boolean,
         pruneDocumentInfo?: boolean
@@ -2645,8 +2656,6 @@ export class App extends BaseApp {
             uiDiv = document.body;
         }
         if (clearParentElement) {
-            accessId = crypto.randomUUID();
-            uiDiv['data-accessid'] = accessId;
             uiDiv.innerHTML = '';
         }
         this.hidePopup();
@@ -2750,7 +2759,6 @@ export class App extends BaseApp {
                     nodeInfo
                 );
             }
-            if (uiDiv['data-accessid'] !== accessId) return;
             // Now we need to output the actual item.
             const childContainerDiv = createDocumentElement('div', {
                 class: 'select-item-dialog-item-row child-item-container os-selectable-item',
@@ -2815,7 +2823,7 @@ export class App extends BaseApp {
      * @returns BTInsertableInfo with deterministicId filled in
      */
     public async findDeterministicPartId(
-         item: BTInsertableInfo
+        item: BTInsertableInfo
     ): Promise<BTInsertableInfo> {
         return new Promise((resolve, _reject) => {
             // Make sure we have to do some work (if it isn't a part or we already know the id, get out of here)
@@ -2912,7 +2920,13 @@ export class App extends BaseApp {
                             console.log(item);
                             console.log(metadata);
                         }
-                        const metaItem = metadata.items[0];
+                        let metaItem = metadata.items[0];
+                        for (const item of metadata.items) {
+                            if (item.partType === 'composite') {
+                                metaItem = item;
+                                break;
+                            }
+                        }
                         result['href'] = metaItem.href;
                         result['isFlattenedBody'] = metaItem.isFlattenedBody;
                         //result['isMesh'] = metaItem.isMesh  // TODO: This needs to be in the API
@@ -3176,7 +3190,12 @@ export class App extends BaseApp {
         // this.currentNodes.items.forEach((nodeItem: BTGlobalTreeNodeInfo)=>{
         //   if(nodeItem.id == item.documentId)return documentNodeInfo = nodeItem;
         // })
-        if (insertInfo !== undefined && insertInfo !== null && insertInfo.configList && insertInfo.configList.length > 0) {
+        if (
+            insertInfo !== undefined &&
+            insertInfo !== null &&
+            insertInfo.configList &&
+            insertInfo.configList.length > 0
+        ) {
             //Document has configurations
             const documentNodeInfoConfig: BTGlobalTreeNodeMagicDataInfo =
                 documentNodeInfo as BTGlobalTreeNodeMagicDataInfo;
@@ -3427,7 +3446,7 @@ export class App extends BaseApp {
                 // TODO: Figure out why we don't get any output when it actually succeeds
                 // post request returns undefined instead of {}
                 if (reason.message !== 'Unexpected end of JSON input') {
-                    console.log("failed to create reason=", reason);
+                    console.log('failed to create reason=', reason);
                 }
             });
     }
@@ -3753,7 +3772,7 @@ export class App extends BaseApp {
         if (this.validAccessId(accessId) === false) return;
 
         const uiDiv = document.getElementById('dump');
-        const container = createDocumentElement('div', {class: 'markdown-body'});
+        const container = createDocumentElement('div', { class: 'markdown-body' });
 
         const html = marked.parse(content);
         if (html instanceof Promise) {

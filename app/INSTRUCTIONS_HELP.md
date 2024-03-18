@@ -9,7 +9,7 @@ The home menu is the default menu which lets users use Insert Tool specific feat
    2. Favorited - users can add and remove documents to and from here for quick access.
    3. Recently Inserted - Documents that the user inserts will appear here with the most recent at the top.
    4. Global Libraries - Users can access global libraries from the FTC Parts Users Library WITHOUT being a member of the teams. This includes ServoCity, GoBilda, Andy Mark, ServoCity, and Rev Robotics.
-   5. Recently Opened - Users can views their recently opened documents here. Note: this is the same as Onshape's recently inserted section.
+   5. Recently Opened - Users can views their recently opened documents here. Note: this is the same as Onshape's recently opened section.
    6. Help/Instructions - The current page. Details instructions and help on Insert Tool app usage.
 
   - **Onshape Features**
@@ -29,7 +29,7 @@ The home menu is the default menu which lets users use Insert Tool specific feat
 
 ## Inserting Documents
 
-  Users can insert documents to active part studio or assembly by navigating to them and left-clicking them.
+  Users can insert documents to the active part studio or assembly by navigating to them and left-clicking them.
 
   **Configurable Documents**  
   When configurable documents are selected, the user will be prompted with configuration options. When they fill out these settings and click the generated document, it will be inserted. 
@@ -79,5 +79,5 @@ Parts libraries are libraries of Onshape documents. Owners of the libraries can 
 - **Parts Library Difference**
   - This document appears as ⏍{library_name} Difference(You can delete)⏍
   - This document is a parts library and is created when the libraries delta is scanned. It contains the additions from the folder location of the library to the parts library.
-  - This document can and should be deleted after manually transfered the additions it contains to the parts library.
+  - This document can and should be deleted after manually transferring the additions it contains to the parts library.
 
