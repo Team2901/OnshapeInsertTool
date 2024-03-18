@@ -79,7 +79,6 @@ export interface magicIconInfo {
     label: string;
     icon: OnshapeSVGIcon;
     hideFromMenu?: boolean;
-    search?: boolean;
 }
 
 export interface homeGroupInfo {
@@ -160,9 +159,9 @@ export class App extends BaseApp {
 
     public magicInfo: { [item: string]: magicIconInfo } = {
         '0': { icon: 'svg-icon-recentlyOpened', label: 'Recently Opened' },
-        '1': { icon: 'svg-icon-myDocuments', label: 'My Onshape', search: true },
-        '2': { icon: 'svg-icon-createdByMe', label: 'Created by Me', search: true },
-        '3': { icon: 'svg-icon-public', label: 'Public', search: true },
+        '1': { icon: 'svg-icon-myDocuments', label: 'My Onshape' },
+        '2': { icon: 'svg-icon-createdByMe', label: 'Created by Me' },
+        '3': { icon: 'svg-icon-public', label: 'Public' },
         '4': { icon: 'svg-icon-trash', label: 'Trash' },
         '5': {
             icon: 'svg-icon-tutorial-element',
@@ -192,8 +191,8 @@ export class App extends BaseApp {
         },
         RI: { icon: 'svg-icon-recentlyOpened', label: 'Recently Inserted' },
         FV: { icon: 'svg-icon-filter-favorite', label: 'Favorited' },
-        LI: { icon: 'svg-icon-libraries', label: 'My Libraries', search: true },
-        GL: { icon: 'svg-icon-library-public', label: 'Global Libraries', search: true },
+        LI: { icon: 'svg-icon-libraries', label: 'My Libraries' },
+        GL: { icon: 'svg-icon-library-public', label: 'Global Libraries' },
         HI: { icon: 'svg-icon-help-button', label: 'Help/Instructions' },
     };
     public homeGrouping: homeGroupInfo[] = [
@@ -379,7 +378,7 @@ export class App extends BaseApp {
             documentType: ['proxy-library'],
             userOwned: true,
             name: 'rebuilddocdescendants',
-            label: 'Refactor parts library',
+            label: 'Rebuild document descendants',
         },
         SCANDELTA: {
             parentType: ['LI'], //any?
@@ -400,21 +399,11 @@ export class App extends BaseApp {
         this.preferences
             .initUserPreferences(this.appName)
             .then((_val) => {
-                if (_val === undefined) this.failApp('Cannot get preferences file');
                 this.onshape.userId = _val.owner.id;
                 // Create the main container
                 var div = createDocumentElement('div', { id: 'apptop' });
                 this.createPopupDialog(div);
                 this.createActionMenu(div);
-
-                //Create search div
-                var searchdiv = createDocumentElement('div', {
-                    id: 'search',
-                    class: 'os-control-container document-version-picker-search-container',
-                    style: 'display:none;',
-                });
-                div.appendChild(searchdiv);
-                this.createSearchBar(searchdiv);
 
                 // Create the main div that shows where we are
                 var bcdiv = createDocumentElement('div', {
@@ -522,12 +511,8 @@ export class App extends BaseApp {
     /**
      * Set the breadcrumbs in the header
      * @param node Node to add to breadcrumbs, if the node is already in the breadcrumbs, it will delete the more recent crumbs until that node
-     * @param temporary true means that the node will not be saved to the preferences file
      */
-    public addBreadcrumbNode(
-        node: BTGlobalTreeMagicNodeInfo,
-        temporary: boolean = false
-    ): void {
+    public addBreadcrumbNode(node: BTGlobalTreeMagicNodeInfo): void {
         let itemInBreadcrumbsIndex: number;
         const itemInBreadcrumbs = this.currentBreadcrumbs.find((crumb, index) => {
             itemInBreadcrumbsIndex = index;
@@ -546,25 +531,22 @@ export class App extends BaseApp {
             console.log(this.currentBreadcrumbs);
         }
         this.currentBreadcrumbs.unshift(node);
-        this.setBreadcrumbs(this.currentBreadcrumbs, undefined, temporary);
+        this.setBreadcrumbs(this.currentBreadcrumbs);
     }
     /**
      * Set the breadcrumbs in the header
      * @param breadcrumbs Array of breadcrumbs (in reverse order)
      * @param teamroot Preserved team root so that we know when we are processing a folder under a team
-     * @param temporary true means that the node will not be saved to the preferences file
      */
     public setBreadcrumbs(
         breadcrumbs: BTGlobalTreeNodeInfo[],
-        teamroot?: BTGlobalTreeNodeInfo,
-        temporary: boolean = false
+        teamroot?: BTGlobalTreeNodeInfo
     ): void {
         // console.log(breadcrumbs);
-        if (temporary !== true)
-            this.saveLastLocation({
-                pathToRoot: breadcrumbs,
-                teamroot: teamroot,
-            });
+        this.saveLastLocation({
+            pathToRoot: breadcrumbs,
+            teamroot: teamroot,
+        });
         // Find where they want us to put the breadcrumbs
         const breadcrumbscontainer = document.getElementById('breadcrumbs');
         if (breadcrumbscontainer === undefined || breadcrumbscontainer === null) {
@@ -806,122 +788,6 @@ export class App extends BaseApp {
         }
         return div;
     }
-
-    /**
-     * Create searchbar
-     * @param parent
-     */
-    public createSearchBar(parent: HTMLElement): void {
-        const searchBarDiv = createDocumentElement('search-box', {
-            class: 'os-row search-box select-item-document-search',
-        });
-        const searchBarDiv2 = createDocumentElement('ng-form', {});
-        const searchBarDiv3 = createDocumentElement('div', {});
-
-        searchBarDiv2.appendChild(searchBarDiv3);
-        searchBarDiv.appendChild(searchBarDiv2);
-
-        //button grayed out because its not implemented
-        const filterButton = createDocumentElement('button', {
-            class: 'toggle-filters os-btn os-clear',
-            style: 'background-color: #cbcbcb',
-            disabled: 'true',
-        });
-        const filterButtonContent = createDocumentElement('div', {
-            class: 'button-content',
-        });
-        const filterIcon = createSVGIcon('svg-icon-filter-results-button');
-        filterButtonContent.appendChild(filterIcon);
-        filterButton.appendChild(filterButtonContent);
-
-        //search input thingy
-        const searchBoxDiv = createDocumentElement('os-search-box', {
-            class: 'os-field',
-        });
-        const searchBoxInput = createDocumentElement('input', {
-            type: 'text',
-            class: 'os-search-box-input os-grow ng-pristine ng-valid ng-empty ng-touched',
-            placeholder: 'Search by name or part number',
-            style: 'font-size: 12px',
-        }) as HTMLButtonElement;
-        const searchBoxClear = createDocumentElement('a', {
-            id: 'search-box-clear-button ng-hide',
-            class: 'os-search-box-clear-button',
-        });
-        const searchBoxClearIcon = createSVGIcon('svg-icon-clear-field-button');
-        searchBoxClear.appendChild(searchBoxClearIcon);
-        searchBoxDiv.appendChild(searchBoxInput);
-        searchBoxDiv.appendChild(searchBoxClear);
-
-        //create submit button
-        const searchButton = createDocumentElement('button', {
-            class: 'submit-search os-btn os-clear',
-        }) as HTMLButtonElement;
-        const searchButtonContent = createDocumentElement('div', {
-            class: 'button-content',
-        });
-        const searchIcon = createSVGIcon('svg-icon-search');
-        searchButtonContent.appendChild(searchIcon);
-        searchButton.appendChild(searchButtonContent);
-
-        searchBarDiv3.appendChild(filterButton);
-        searchBarDiv3.appendChild(searchBoxDiv);
-        searchBarDiv3.appendChild(searchButton);
-
-        searchBoxClear.onclick = () => {
-            searchBoxInput.value = '';
-            searchBoxClear.classList.remove('ng-hide');
-        };
-        searchBoxInput.addEventListener('input', () => {
-            const value = searchBoxInput.value;
-            if (value !== undefined && value !== null && value !== '') {
-                searchBoxClear.classList.remove('ng-hide');
-                searchButton.disabled = false;
-            } else {
-                searchBoxClear.classList.add('ng-hide');
-                searchButton.disabled = true;
-            }
-        });
-
-        const onsubmit = () => {
-            const value = searchBoxInput.value;
-            if (value === undefined || value === null || value === '') return;
-            this.gotoFolder({ jsonType: 'search', description: value });
-        };
-
-        searchButton.onclick = () => onsubmit();
-        searchBoxInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') searchButtonContent.click();
-        });
-        parent.appendChild(searchBarDiv);
-    }
-
-    private showSearchBar(): void {
-        const searchDiv = document.getElementById('search');
-        if (searchDiv !== undefined && searchDiv !== null)
-            searchDiv.style.display = 'block';
-    }
-    private hideSearchBar(): void {
-        const searchDiv = document.getElementById('search');
-        if (searchDiv !== undefined && searchDiv !== null)
-            searchDiv.style.display = 'none';
-    }
-
-    private checkSearchBarEnabled(newFolder: BTGlobalTreeNodeInfo): void {
-        switch (newFolder.jsonType) {
-            case 'home': {
-                this.hideSearchBar();
-                break;
-            }
-            case 'magic':
-                if (newFolder.id !== 'GL' && newFolder.id !== 'LI') break;
-            case 'search': {
-                this.showSearchBar();
-                break;
-            }
-        }
-    }
-
     /**
      *
      */
@@ -1171,10 +1037,7 @@ export class App extends BaseApp {
             dump.append(container);
         }
         const breadcrumbdiv = document.getElementById('breadcrumbs');
-        const searchbardiv = document.getElementById('search');
-        const breadcrumbHeight =
-            (breadcrumbdiv && breadcrumbdiv.clientHeight) +
-                (searchbardiv && searchbardiv.clientHeight) || 25;
+        const breadcrumbHeight = (breadcrumbdiv && breadcrumbdiv.clientHeight) || 25;
         container.style.top = breadcrumbHeight + 'px';
         return container;
     }
@@ -2673,19 +2536,7 @@ export class App extends BaseApp {
                 (res) => {
                     if (res.length === 0) {
                         // Nothing was insertable at all, so we just need to let them know that
-                        if (this.targetDocumentElementInfo.elementType === 'PARTSTUDIO') {
-                            this.getInsertChoices(item, 'ASSEMBLY').then((res) => {
-                                if (res.length != 0) {
-                                    alert(
-                                        'This document only contains assembilies, so they cannot be inserted into the active partstudio'
-                                    );
-                                } else {
-                                    alert('Nothing is insertable from this document');
-                                }
-                            });
-                        } else {
-                            alert('Nothing is insertable from this document');
-                        }
+                        alert('Nothing is insertable from this document');
                     } else if (res.length === 1) {
                         if (
                             res[0].configurationParameters !== undefined &&
@@ -3628,7 +3479,9 @@ export class App extends BaseApp {
                     },
                 ];
                 this.setBreadcrumbs(pathToRoot);
-                if (res === undefined || res === null) return;
+                if (res === undefined || res === null) {
+                    return;
+                }
                 const recentNode: BTGlobalTreeNodesInfo = {
                     pathToRoot,
                     next: (index + 1).toString(),
@@ -3659,7 +3512,9 @@ export class App extends BaseApp {
                     },
                 ];
                 this.setBreadcrumbs(pathToRoot);
-                if (res === undefined || res === null) return;
+                if (res === undefined || res === null) {
+                    return;
+                }
                 const recentNode: BTGlobalTreeNodesInfo = {
                     pathToRoot,
                     next: (index + 1).toString(),
@@ -3690,7 +3545,9 @@ export class App extends BaseApp {
                     },
                 ];
                 this.setBreadcrumbs(pathToRoot);
-                if (res === undefined || res === null) return;
+                if (res === undefined || res === null) {
+                    return;
+                }
                 const recentNode: BTGlobalTreeNodesInfo = {
                     pathToRoot,
                     next: (index + 1).toString(),
@@ -3741,56 +3598,6 @@ export class App extends BaseApp {
 
         // });
     }
-
-    public processInsertablesSearch(
-        parentId: string,
-        match: string,
-        accessId: string
-    ): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            this.onshape.documentApi
-                .search({ bTDocumentSearchParams: {ownerId: this.onshape.userId,
-                  limit: 100,
-                  when: 'LATEST',
-                  sortColumn: '',
-                  sortOrder: '',
-                  rawQuery: 'type:document name:⚙ Preferences ⚙',
-                  documentFilter: 0,} })
-                .then((results) => {
-                    if (results === undefined || results === null) return resolve(false);
-                    // if(!results.items || (results.items && results.items.length ===0))return resolve(false);
-                });
-        });
-    }
-
-    public processProxyLibrarySearch(
-        id: string,
-        match: string,
-        accessId: string
-    ): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            this.libraries.getLibrarySearchInfo(id).then((res) => {
-                if (res === undefined) res = [];
-                let items = res as unknown as Array<{
-                    id: string;
-                    partNumber?: string;
-                    name: string;
-                }>;
-
-                const re = new RegExp(match);
-                this.currentSearchItems = this.currentSearchItems.concat(
-                    items.filter(
-                        (item) =>
-                            (
-                                item.name.toLowerCase() + (item.partNumber + ' ' || '')
-                            ).match(re) !== null
-                    ) as Array<{ id: string; partNumber: string; name: string }>
-                );
-                resolve(this.getSearchItemByIndex(accessId, 0));
-            });
-        });
-    }
-
     /**
      * Process the results of the global libraries node
      * @param index what index global library node it should fetch and process
@@ -3875,125 +3682,6 @@ export class App extends BaseApp {
                 console.log(`**** Call failed: ${err}`);
             });
     }
-
-    private currentSearchItems: Array<{ id: string; name: string; partNumber: string }>;
-
-    public processSearch(searchInfo: BTGlobalTreeMagicNodeInfo, accessId: string) {
-        //id is where to search under NOPE (not needed)
-        //description is search input
-        //resourceType is jsonType of item being searched NOPE (not needed yet?)
-        //proxy folder will search the proxy library it is in NOPE (not needed yet?)
-        let currentItem = this.currentBreadcrumbs[0];
-        if (currentItem.jsonType === 'search') currentItem = this.currentBreadcrumbs[1];
-        const itemJsonType = currentItem.jsonType;
-
-        searchInfo.description = searchInfo.description.toLowerCase();
-
-        console.log('Searching', searchInfo, itemJsonType);
-        const searchRegExactArray = [];
-        const searchRegNormalArray = [];
-
-        const exactMatchReg = /\"([^\"]+)+\"/gm;
-        const exactMatches = searchInfo.description.matchAll(exactMatchReg);
-        for (const match of exactMatches) searchRegExactArray.push(match[1]);
-        const resultingSearchString = searchInfo.description.replace(exactMatchReg, '');
-        const normalMatchReg = /(\w+)/gm;
-        const normalMatches = resultingSearchString.matchAll(normalMatchReg);
-        for (const match of normalMatches) searchRegNormalArray.push(match[1]);
-
-        const searchMatchReg =
-            '(?:^|W)(' +
-            searchRegExactArray.join('|') +
-            ')(?:$|W) | (' +
-            searchRegNormalArray.join('|') +
-            ')';
-
-        this.currentSearchItems = [];
-        if (itemJsonType === 'folder') {
-            // this.onshape.documentApi.getInsertables({
-            // })
-        } else if (itemJsonType === 'proxy-library') {
-            this.processProxyLibrarySearch(currentItem.id, searchMatchReg, accessId).then(
-                (content) => {
-                    if (content !== true) {
-                        this.ProcessNodeResults(
-                            {
-                                pathToRoot: this.currentBreadcrumbs,
-                                items: [
-                                    {
-                                        jsonType: 'no-content',
-                                        name: 'No parts matched your search.',
-                                    },
-                                ],
-                            },
-                            accessId
-                        );
-                    }
-                }
-            );
-        } else if (
-            itemJsonType === 'magic' &&
-            (currentItem.id === 'LI' || currentItem.id === 'GL')
-        ) {
-            //currentNodes are all libraries
-            const promises: Promise<boolean>[] = [];
-            for (let library of this.currentNodeInfo.items) {
-                promises.push(
-                    this.processProxyLibrarySearch(library.id, searchMatchReg, accessId)
-                );
-            }
-            Promise.all(promises).then((contentArray) => {
-                let nocontent = true;
-                for (let content of contentArray) {
-                    if (content === true) nocontent = false;
-                }
-                if (nocontent) {
-                    this.ProcessNodeResults(
-                        {
-                            pathToRoot: this.currentBreadcrumbs,
-                            items: [
-                                {
-                                    jsonType: 'no-content',
-                                    name: 'No parts matched your search.',
-                                },
-                            ],
-                        },
-                        accessId
-                    );
-                }
-            });
-        }
-    }
-
-    public getSearchItemByIndex(accessId: string, index: number): Promise<boolean> {
-        return new Promise((resolve, reject) => {
-            const pathToRoot = [
-                {
-                    jsonType: 'search',
-                    id: 'SR',
-                    name: 'Search Results',
-                    resourceType: 'search',
-                },
-            ];
-
-            const item = this.currentSearchItems[index];
-            if (item === undefined || item === null) return resolve(false);
-            this.onshape.documentApi.getDocument({ did: item.id }).then((res) => {
-                if (res === undefined) return resolve(false);
-                res.jsonType = 'document-summary';
-                const searchNodes: BTGlobalTreeNodesInfo = {
-                    pathToRoot,
-                    href: undefined,
-                    next: (index + 1).toString(),
-                    items: [res],
-                };
-                this.addBreadcrumbNode(pathToRoot[0]);
-                this.ProcessNodeResults(searchNodes, accessId);
-                resolve(true);
-            });
-        });
-    }
-
     public processNextNodes(
         info: BTGlobalTreeNodesInfo,
         accessId: string,
@@ -4018,16 +3706,9 @@ export class App extends BaseApp {
                 }
                 break;
             }
-            case 'search': {
-                this.getSearchItemByIndex(accessId, parseInt(info.next));
-                break;
-            }
         }
         // Request the UI to jump to the next entry in the list.
     }
-
-    private currentNodeInfo: BTGlobalTreeNodesInfo;
-
     /**
      * Dump out all the elements that were returned from Onshape
      * @param info Node entry to be processed
@@ -4039,19 +3720,12 @@ export class App extends BaseApp {
         teamroot?: BTGlobalTreeNodeInfo,
         subsetConfigurables?: boolean
     ) {
+        console.log(info);
         if (this.validAccessId(accessId) === false) return;
+        const nodes = info as BTGlobalTreeNodesInfo;
         // When it does, append all the elements to the UI
-        if (
-            (info && info.items && info.items.length > 0,
-            this.currentBreadcrumbs &&
-                !(
-                    this.currentBreadcrumbs.length > 1 &&
-                    this.currentBreadcrumbs[1].jsonType === 'search'
-                ))
-        )
-            this.currentNodeInfo = info;
         this.appendElements(
-            info.items,
+            nodes.items,
             info.pathToRoot[0],
             teamroot,
             subsetConfigurables,
@@ -4063,8 +3737,7 @@ export class App extends BaseApp {
             info.next !== undefined &&
             this.loaded < this.loadedlimit
         ) {
-            if (this.validAccessId(accessId) === false)
-                return console.log('Invalid access id', info);
+            if (this.validAccessId(accessId) === false) return;
             // We have more entries, so lets put a little "Loading More..." element at the
             // end of the list.  When it becomes visible because they scrolled down or because there
             // is more room on the screen, we will delete that Loading More element and then process
@@ -4175,7 +3848,7 @@ export class App extends BaseApp {
                 .getProxyLibrary(undefined, item.id)
                 .then((res) => {
                     this.addBreadcrumbNode(item);
-                    // this.setBreadcrumbs(this.currentBreadcrumbs, teamroot);
+                    this.setBreadcrumbs(this.currentBreadcrumbs, teamroot);
                     this.ProcessNodeResults(
                         {
                             items: res.contents,
@@ -4217,10 +3890,8 @@ export class App extends BaseApp {
             this.processHome(dumpNodes);
         } else if (item.jsonType === 'magic' || item.resourceType === 'magic') {
             this.processMagicNode(item.id, accessId);
-        } else if (item.jsonType === 'search') {
-            this.processSearch(item, accessId);
         } else {
-            // console.log('generic folder', item);
+            console.log('generic folder', item);
             this.onshape.globalTreeNodesApi
                 .globalTreeNodesFolderInsertables({
                     fid: item.id,
@@ -4232,7 +3903,7 @@ export class App extends BaseApp {
                     includeSurfaces: false,
                 })
                 .then((res) => {
-                    // console.log('generic folder information', res);
+                    console.log('generic folder information', res);
                     this.addBreadcrumbNode(
                         (res && res.pathToRoot && res.pathToRoot[0]) || item
                     );
@@ -4243,6 +3914,5 @@ export class App extends BaseApp {
                     console.log(`**** Call failed: ${err}`);
                 });
         }
-        this.checkSearchBarEnabled(item);
     }
 }
