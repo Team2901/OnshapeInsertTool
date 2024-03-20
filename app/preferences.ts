@@ -370,14 +370,19 @@ export class Preferences {
         return new Promise(async (resolve, reject) => {
             if (refreshNodeResults === true) {
                 const result = await this.getAllOfMagicType(magicType, libInfo);
-                if (result === undefined || result.length === 0) {
+                console.log('getting magic nodes', result);
+                if (result === undefined) {
                     this.magicNodes[magicType] = [];
-                    resolve(undefined);
+                }
+                if (result.length === 0) {
+                    resolve([
+                        { jsonType: 'no-content', name: 'No documents or folders here.' },
+                    ]);
                 }
                 this.magicNodes[magicType] = result;
             }
             const currentNodes = this.magicNodes[magicType];
-            if (index >= currentNodes.length) {
+            if (index >= currentNodes.length || index < 0) {
                 resolve(undefined);
             }
             resolve([currentNodes[index]]);

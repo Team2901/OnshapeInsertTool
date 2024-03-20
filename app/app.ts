@@ -988,7 +988,18 @@ export class App extends BaseApp {
             textCol.appendChild(docName);
             rowelem.appendChild(textCol);
 
-            rowelem.onmouseover = () => {
+            if (item.jsonType === 'no-content') {
+                selectable = false;
+                container.appendChild(rowContainer);
+                rowelem.style.justifyContent = 'center';
+                rowelem.style.cursor = 'default';
+                rowelem.style.marginTop = '10%';
+                rowelem.style.userSelect = 'none';
+                rowelem.classList.remove('os-selectable-item');
+                return;
+            }
+
+            rowelem.onmouseover = (e) => {
                 waitForTooltip(
                     rowelem,
                     () => {
@@ -1040,7 +1051,6 @@ export class App extends BaseApp {
                             res,
                             item,
                             lastLoaded,
-                            accessId,
                             rowContainer,
                             false,
                             true
@@ -2582,7 +2592,6 @@ export class App extends BaseApp {
                                 res,
                                 itemRaw,
                                 renderIndex,
-                                accessId,
                                 undefined,
                                 clearParentElement
                             );
@@ -2604,7 +2613,6 @@ export class App extends BaseApp {
                             res,
                             itemRaw,
                             renderIndex,
-                            accessId,
                             undefined,
                             clearParentElement
                         );
@@ -2683,7 +2691,6 @@ export class App extends BaseApp {
         items: BTInsertableInfo[],
         nodeInfo: BTGlobalTreeMagicNodeInfo,
         renderIndex: number,
-        accessId: string,
         parentElement?: HTMLElement,
         clearParentElement?: boolean,
         pruneDocumentInfo?: boolean
@@ -2694,8 +2701,6 @@ export class App extends BaseApp {
             uiDiv = document.body;
         }
         if (clearParentElement) {
-            accessId = crypto.randomUUID();
-            uiDiv['data-accessid'] = accessId;
             uiDiv.innerHTML = '';
         }
         this.hidePopup();
@@ -2799,7 +2804,6 @@ export class App extends BaseApp {
                     nodeInfo
                 );
             }
-            if (uiDiv['data-accessid'] !== accessId) return;
             // Now we need to output the actual item.
             const childContainerDiv = createDocumentElement('div', {
                 class: 'select-item-dialog-item-row child-item-container os-selectable-item',
@@ -2961,7 +2965,13 @@ export class App extends BaseApp {
                             console.log(item);
                             console.log(metadata);
                         }
-                        const metaItem = metadata.items[0];
+                        let metaItem = metadata.items[0];
+                        for (const item of metadata.items) {
+                            if (item.partType === 'composite') {
+                                metaItem = item;
+                                break;
+                            }
+                        }
                         result['href'] = metaItem.href;
                         result['isFlattenedBody'] = metaItem.isFlattenedBody;
                         //result['isMesh'] = metaItem.isMesh  // TODO: This needs to be in the API
