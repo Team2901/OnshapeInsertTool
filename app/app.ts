@@ -79,6 +79,7 @@ export interface magicIconInfo {
     label: string;
     icon: OnshapeSVGIcon;
     hideFromMenu?: boolean;
+    notFreeUser?: boolean;
 }
 
 export interface homeGroupInfo {
@@ -122,6 +123,7 @@ export interface actionMenuOptionInfo {
     deleteIcon?: boolean; //
     parentWithoutDocument?: string[]; // rendered if no document is selected and parent json type is one of these
     userOwned?: boolean; //document is owned by this user
+    notFreeUser?: boolean;
 }
 
 export interface actionMenuOptionInputInfo {
@@ -137,6 +139,7 @@ export class App extends BaseApp {
     public loadedlimit = 2500; // Maximum number of items we will load
     public targetDocumentElementInfo: BTDocumentElementInfo = {};
     public appName: string = APP_NAME;
+    public freeUser: boolean = false;
 
     public insertToTarget: (
         documentId: string,
@@ -189,9 +192,13 @@ export class App extends BaseApp {
             icon: 'svg-icon-tutorial-element',
             label: 'Custom table samples',
         },
-        RI: { icon: 'svg-icon-recentlyOpened', label: 'Recently Inserted' },
-        FV: { icon: 'svg-icon-filter-favorite', label: 'Favorited' },
-        LI: { icon: 'svg-icon-libraries', label: 'My Libraries' },
+        RI: {
+            icon: 'svg-icon-recentlyOpened',
+            label: 'Recently Inserted',
+            notFreeUser: true,
+        },
+        FV: { icon: 'svg-icon-filter-favorite', label: 'Favorited', notFreeUser: true },
+        LI: { icon: 'svg-icon-libraries', label: 'My Libraries', notFreeUser: true },
         GL: { icon: 'svg-icon-library-public', label: 'Global Libraries' },
         HI: { icon: 'svg-icon-help-button', label: 'Help/Instructions' },
     };
@@ -233,6 +240,7 @@ export class App extends BaseApp {
             documentType: ['document-summary'],
             name: 'favorite',
             label: 'Loading favorite status...',
+            notFreeUser: true,
         },
         // CLONELIB: {
         //     parentType: ['any'], //exclude: LI / My Libraries
@@ -246,6 +254,7 @@ export class App extends BaseApp {
             documentType: ['proxy-library'],
             name: 'addproxylibrary',
             label: 'Loading My Libraries status...',
+            notFreeUser: true,
         },
         CREATELIB: {
             parentType: ['home', 'LI'],
@@ -260,6 +269,7 @@ export class App extends BaseApp {
                 },
             ],
             parentWithoutDocument: ['LI'],
+            notFreeUser: true,
         },
         ADDLIBDOC: {
             parentType: ['any'],
@@ -274,6 +284,7 @@ export class App extends BaseApp {
                 },
             ],
             userOwned: true,
+            notFreeUser: true
         },
         ADDPROXYDOC: {
             parentType: ['any'],
@@ -293,6 +304,7 @@ export class App extends BaseApp {
                 },
             ],
             userOwned: true,
+            notFreeUser: true,
         },
         REPROXYDOC: {
             parentType: ['proxy-folder'],
@@ -301,6 +313,7 @@ export class App extends BaseApp {
             label: 'Remove document from library folder',
             deleteIcon: true,
             userOwned: true,
+            notFreeUser: true,
         },
         RELIBDOC: {
             parentType: ['proxy-library'],
@@ -309,6 +322,7 @@ export class App extends BaseApp {
             label: 'Remove document from library',
             deleteIcon: true,
             userOwned: true,
+            notFreeUser: true,
         },
         CREATEPROXY: {
             parentType: ['any'],
@@ -325,6 +339,7 @@ export class App extends BaseApp {
             ],
             parentWithoutDocument: ['proxy-library', 'proxy-folder'],
             userOwned: true,
+            notFreeUser: true,
         },
         DELPROXY: {
             parentType: ['proxy-library', 'proxy-folder'],
@@ -333,6 +348,7 @@ export class App extends BaseApp {
             label: 'Remove folder',
             deleteIcon: true,
             userOwned: true,
+            notFreeUser: true,
         },
         MOVEPROXY: {
             parentType: ['proxy-library', 'proxy-folder'],
@@ -352,6 +368,7 @@ export class App extends BaseApp {
                     type: 'select',
                 },
             ],
+            notFreeUser: true,
         },
         MOVEDOC: {
             parentType: ['proxy-library', 'proxy-folder'],
@@ -366,12 +383,14 @@ export class App extends BaseApp {
                     type: 'select',
                 },
             ],
+            notFreeUser: true,
         },
         CLONEFOLDER: {
             parentType: ['any'],
             documentType: ['folder'],
             name: 'createlibraryfromfolder',
             label: 'Create a parts library from folder',
+            notFreeUser: true,
         },
         BUILDDESC: {
             parentType: ['LI'], //any?
@@ -379,6 +398,7 @@ export class App extends BaseApp {
             userOwned: true,
             name: 'rebuilddocdescendants',
             label: 'Rebuild document descendants',
+            notFreeUser: true,
         },
         SCANDELTA: {
             parentType: ['LI'], //any?
@@ -386,6 +406,7 @@ export class App extends BaseApp {
             userOwned: true,
             name: 'scanproxylibrarydelta',
             label: 'Scan library for changes',
+            notFreeUser: true,
         },
     };
     public preferences: Preferences;
@@ -399,7 +420,18 @@ export class App extends BaseApp {
         this.preferences
             .initUserPreferences(this.appName)
             .then((_val) => {
-                this.onshape.userId = _val.owner.id;
+                if (_val === undefined || _val === null || this.preferences.freeUser) {
+                    if (this.preferences.freeUser) {
+                        this.freeUser = true;
+                    } else {
+                        console.error(
+                            'Cannot create initallize user preferences. They are not a free user'
+                        );
+                    }
+                } else {
+                    this.onshape.userId = _val.owner.id;
+                }
+
                 // Create the main container
                 var div = createDocumentElement('div', { id: 'apptop' });
                 this.createPopupDialog(div);
@@ -450,6 +482,10 @@ export class App extends BaseApp {
                             });
                         }
                         this.getLastLocation().then((lastLocation) => {
+                            if (lastLocation === undefined) {
+                                this.gotoFolder({ jsonType: 'home' });
+                                return;
+                            }
                             this.setBreadcrumbs(lastLocation);
                             this.gotoFolder(lastLocation[0]);
                         });
@@ -481,6 +517,7 @@ export class App extends BaseApp {
      */
     public saveLastLocation(location: folderLocation): void {
         // console.log(location, '______');
+        if (this.freeUser) return;
         this.preferences.setLastKnownLocation(location.pathToRoot);
     }
     /**
@@ -489,6 +526,7 @@ export class App extends BaseApp {
      */
     public getLastLocation(): Promise<Array<BTGlobalTreeNodeInfo>> {
         return new Promise((resolve, _reject) => {
+            if (this.freeUser) return resolve(undefined);
             this.preferences
                 .getLastKnownLocation()
                 .then((locations) => {
@@ -793,6 +831,7 @@ export class App extends BaseApp {
      */
     private processHomeNode(magicid: string, table: JTTable) {
         const magicinfo = this.magicInfo[magicid];
+        if (magicinfo.notFreeUser === true && this.freeUser === true) return;
         if (!magicinfo.hideFromMenu) {
             const magicNode: BTGlobalTreeNodeInfo = {
                 jsonType: 'magic',
@@ -1224,6 +1263,12 @@ export class App extends BaseApp {
                     submitElement = document.getElementById(
                         optionId + '_submit'
                     ) as HTMLButtonElement;
+                }
+
+                //make sure free user status is right
+                if (option.notFreeUser === true && this.freeUser === true) {
+                    optionElement.parentElement.style.display = 'none';
+                    continue;
                 }
 
                 //makes sure user ownership status is right
@@ -1770,13 +1815,15 @@ export class App extends BaseApp {
                                     libraries.forEach((library) => {
                                         libraryOptions.push({
                                             id: library.id,
-                                            label: this.libraries.decodeLibraryName(library.name),
+                                            label: this.libraries.decodeLibraryName(
+                                                library.name
+                                            ),
                                         });
                                     });
                                     this.updateActionMenuInputOptions(
-                                      inputLibElement.id,
-                                      libraryOptions
-                                  );
+                                        inputLibElement.id,
+                                        libraryOptions
+                                    );
                                 });
                             inputLibElement.onchange = () => {
                                 selectedLibrary = undefined;
@@ -1876,7 +1923,9 @@ export class App extends BaseApp {
                                             .then(() => {
                                                 this.setInProgress(false);
                                                 this.hideActionMenu();
-                                                this.gotoFolder(this.currentBreadcrumbs[0])
+                                                this.gotoFolder(
+                                                    this.currentBreadcrumbs[0]
+                                                );
                                             });
                                     } else {
                                         console.warn(res);
@@ -2815,7 +2864,7 @@ export class App extends BaseApp {
      * @returns BTInsertableInfo with deterministicId filled in
      */
     public async findDeterministicPartId(
-         item: BTInsertableInfo
+        item: BTInsertableInfo
     ): Promise<BTInsertableInfo> {
         return new Promise((resolve, _reject) => {
             // Make sure we have to do some work (if it isn't a part or we already know the id, get out of here)
@@ -3176,7 +3225,12 @@ export class App extends BaseApp {
         // this.currentNodes.items.forEach((nodeItem: BTGlobalTreeNodeInfo)=>{
         //   if(nodeItem.id == item.documentId)return documentNodeInfo = nodeItem;
         // })
-        if (insertInfo !== undefined && insertInfo !== null && insertInfo.configList && insertInfo.configList.length > 0) {
+        if (
+            insertInfo !== undefined &&
+            insertInfo !== null &&
+            insertInfo.configList &&
+            insertInfo.configList.length > 0
+        ) {
             //Document has configurations
             const documentNodeInfoConfig: BTGlobalTreeNodeMagicDataInfo =
                 documentNodeInfo as BTGlobalTreeNodeMagicDataInfo;
@@ -3427,7 +3481,7 @@ export class App extends BaseApp {
                 // TODO: Figure out why we don't get any output when it actually succeeds
                 // post request returns undefined instead of {}
                 if (reason.message !== 'Unexpected end of JSON input') {
-                    console.log("failed to create reason=", reason);
+                    console.log('failed to create reason=', reason);
                 }
             });
     }
@@ -3753,7 +3807,7 @@ export class App extends BaseApp {
         if (this.validAccessId(accessId) === false) return;
 
         const uiDiv = document.getElementById('dump');
-        const container = createDocumentElement('div', {class: 'markdown-body'});
+        const container = createDocumentElement('div', { class: 'markdown-body' });
 
         const html = marked.parse(content);
         if (html instanceof Promise) {

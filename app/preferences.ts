@@ -91,6 +91,7 @@ export class Preferences {
     public onshape: OnshapeAPI;
     public userPreferencesInfo: BTGlobalTreeProxyInfo = undefined;
     public newUser: boolean = false;
+    public freeUser: boolean = false;
 
     //magic nodes cache for getting by index
     magicNodes: { [name: string]: BTGlobalTreeNodeInfo[] } = {
@@ -123,6 +124,7 @@ export class Preferences {
         return new Promise((resolve, _reject) => {
             this.getPreferencesDoc()
                 .then((res) => {
+                    if (res === undefined) return resolve(undefined);
                     this.getAppElement(appName, this.userPreferencesInfo)
                         .then((res) => {
                             console.log(res);
@@ -279,6 +281,7 @@ export class Preferences {
         limit?: number
     ): Promise<boolean> {
         return new Promise((resolve, _reject) => {
+            if (this.freeUser) return resolve(false);
             const BTGType = this.magicTypeToBTGType[magicType];
             this.getAllOfMagicType(magicType).then((nodes: BTGlobalTreeNodeInfo[]) => {
                 const newNodes: BTGlobalTreeNodeInfo[] = [];
@@ -321,6 +324,7 @@ export class Preferences {
         libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
     ): Promise<boolean> {
         return new Promise((resolve, _reject) => {
+            if (this.freeUser) return resolve(false);
             const BTGType = this.magicTypeToBTGType[magicType];
             this.getAllOfMagicType(magicType, libInfo).then(
                 (nodes: BTGlobalTreeNodeInfo[]) => {
@@ -449,7 +453,7 @@ export class Preferences {
     //     });
     // }
     /**
-     * 
+     *
      * @param libInfo library object with element id to save to
      * @param info object with {pref_name: array} for multiple entries
      */
@@ -458,7 +462,7 @@ export class Preferences {
         info: { [pref_name: string]: BTGlobalTreeNodeInfo[] }
     ): Promise<boolean>;
     /**
-     * 
+     *
      * @param libInfo library object with element id to save to
      * @param pref_name  key to save the array under
      * @param array Array to save - Array of BTGlobalTreeNodeInfo representing the full path to the location
@@ -480,12 +484,13 @@ export class Preferences {
     ): Promise<boolean> {
         let info: { [pref_name: string]: Array<BTGlobalTreeNodeInfo> } = {};
         if (typeof param2 === 'string') {
-            //param2 is 
+            //param2 is
             info[param2] = param3;
         } else {
             info = param2;
         }
         return new Promise((resolve, _reject) => {
+            if (this.freeUser) return resolve(false);
             this.getAppJson(libInfo)
                 .then((res) => {
                     let pref_name: string;
@@ -575,7 +580,8 @@ export class Preferences {
      */
     public getAppJson(libInfo: BTGlobalTreeProxyInfo): Promise<JSON> {
         return new Promise((resolve, _reject) => {
-            if(libInfo.wvmid === undefined || libInfo.wvmid === null)return console.error("NO WVMID", libInfo)
+            if (libInfo.wvmid === undefined || libInfo.wvmid === null)
+                return console.error('NO WVMID', libInfo);
             this.onshape.blobElementApi
                 .downloadFileWorkspace({
                     did: libInfo.id,
@@ -754,6 +760,15 @@ export class Preferences {
                         },
                     })
                     .then((res) => {
+                        if (
+                            res === undefined ||
+                            res === null ||
+                            (res && res.id === undefined)
+                        ) {
+                            //Most likely a free account
+                            this.freeUser = true;
+                            return resolve(undefined);
+                        }
                         console.log(
                             'Created new preferences document since it did not exist.'
                         );
