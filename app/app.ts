@@ -79,7 +79,6 @@ export interface magicIconInfo {
     label: string;
     icon: OnshapeSVGIcon;
     hideFromMenu?: boolean;
-    notFreeUser?: boolean;
 }
 
 export interface homeGroupInfo {
@@ -123,7 +122,6 @@ export interface actionMenuOptionInfo {
     deleteIcon?: boolean; //
     parentWithoutDocument?: string[]; // rendered if no document is selected and parent json type is one of these
     userOwned?: boolean; //document is owned by this user
-    notFreeUser?: boolean;
 }
 
 export interface actionMenuOptionInputInfo {
@@ -194,10 +192,9 @@ export class App extends BaseApp {
         RI: {
             icon: 'svg-icon-recentlyOpened',
             label: 'Recently Inserted',
-            notFreeUser: true,
         },
-        FV: { icon: 'svg-icon-filter-favorite', label: 'Favorited', notFreeUser: true },
-        LI: { icon: 'svg-icon-libraries', label: 'My Libraries', notFreeUser: true },
+        FV: { icon: 'svg-icon-filter-favorite', label: 'Favorited'},
+        LI: { icon: 'svg-icon-libraries', label: 'My Libraries'},
         GL: { icon: 'svg-icon-library-public', label: 'Global Libraries' },
         HI: { icon: 'svg-icon-help-button', label: 'Help/Instructions' },
     };
@@ -239,7 +236,6 @@ export class App extends BaseApp {
             documentType: ['document-summary'],
             name: 'favorite',
             label: 'Loading favorite status...',
-            notFreeUser: true,
         },
         // CLONELIB: {
         //     parentType: ['any'], //exclude: LI / My Libraries
@@ -253,7 +249,6 @@ export class App extends BaseApp {
             documentType: ['proxy-library'],
             name: 'addproxylibrary',
             label: 'Loading My Libraries status...',
-            notFreeUser: true,
         },
         CREATELIB: {
             parentType: ['home', 'LI'],
@@ -268,7 +263,6 @@ export class App extends BaseApp {
                 },
             ],
             parentWithoutDocument: ['LI'],
-            notFreeUser: true,
         },
         ADDLIBDOC: {
             parentType: ['any'],
@@ -282,7 +276,6 @@ export class App extends BaseApp {
                     type: 'select',
                 },
             ],
-            notFreeUser: true,
         },
         ADDPROXYDOC: {
             parentType: ['any'],
@@ -301,7 +294,6 @@ export class App extends BaseApp {
                     type: 'select',
                 },
             ],
-            notFreeUser: true,
         },
         REPROXYDOC: {
             parentType: ['proxy-folder'],
@@ -310,7 +302,6 @@ export class App extends BaseApp {
             label: 'Remove document from library folder',
             deleteIcon: true,
             userOwned: true,
-            notFreeUser: true,
         },
         RELIBDOC: {
             parentType: ['proxy-library'],
@@ -319,7 +310,6 @@ export class App extends BaseApp {
             label: 'Remove document from library',
             deleteIcon: true,
             userOwned: true,
-            notFreeUser: true,
         },
         CREATEPROXY: {
             parentType: ['any'],
@@ -336,7 +326,6 @@ export class App extends BaseApp {
             ],
             parentWithoutDocument: ['proxy-library', 'proxy-folder'],
             userOwned: true,
-            notFreeUser: true,
         },
         DELPROXY: {
             parentType: ['proxy-library', 'proxy-folder'],
@@ -345,7 +334,6 @@ export class App extends BaseApp {
             label: 'Remove folder',
             deleteIcon: true,
             userOwned: true,
-            notFreeUser: true,
         },
         MOVEPROXY: {
             parentType: ['proxy-library', 'proxy-folder'],
@@ -365,7 +353,6 @@ export class App extends BaseApp {
                     type: 'select',
                 },
             ],
-            notFreeUser: true,
         },
         MOVEDOC: {
             parentType: ['proxy-library', 'proxy-folder'],
@@ -380,14 +367,12 @@ export class App extends BaseApp {
                     type: 'select',
                 },
             ],
-            notFreeUser: true,
         },
         CLONEFOLDER: {
             parentType: ['any'],
             documentType: ['folder'],
             name: 'createlibraryfromfolder',
             label: 'Create a parts library from folder',
-            notFreeUser: true,
         },
         BUILDDESC: {
             parentType: ['LI'], //any?
@@ -395,7 +380,6 @@ export class App extends BaseApp {
             userOwned: true,
             name: 'rebuilddocdescendants',
             label: 'Rebuild document descendants',
-            notFreeUser: true,
         },
         SCANDELTA: {
             parentType: ['LI'], //any?
@@ -403,7 +387,6 @@ export class App extends BaseApp {
             userOwned: true,
             name: 'scanproxylibrarydelta',
             label: 'Scan library for changes',
-            notFreeUser: true,
         },
     };
     public preferences: Preferences;
@@ -430,10 +413,6 @@ export class App extends BaseApp {
                         );
                     }
                 }
-                // else {
-                // this.onshape.userId = _val.owner.id;
-                // }
-
                 // Create the main container
                 var div = createDocumentElement('div', { id: 'apptop' });
                 this.createPopupDialog(div);
