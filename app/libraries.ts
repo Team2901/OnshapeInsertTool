@@ -474,6 +474,9 @@ export class Library extends Preferences {
                         });
                     } else {
                         // console.log('cloning children into folder');
+                        folders.forEach((child) => {
+                            recurseOnFolder(child, library, false, descendantArray);
+                        });
                         this.createProxyFolder(
                             library,
                             folder,
@@ -485,14 +488,6 @@ export class Library extends Preferences {
                             .then((proxyFolder: BTGlobalTreeNodeInfo) => {
                                 if (descendantArray !== undefined)
                                     descendantArray.push(proxyFolder);
-                                folders.forEach((child) => {
-                                    recurseOnFolder(
-                                        child,
-                                        library,
-                                        false,
-                                        descendantArray
-                                    );
-                                });
                                 resolve();
                             })
                             .catch((err) => {
@@ -557,7 +552,7 @@ export class Library extends Preferences {
                             did: parentLibrary.id,
                             wid: parentLibrary['wvmid'], //might need to wrap this call in getProxyLibrary to make sure these properties exist
                             bTCopyDocumentParams: {
-                                isPublic: false,
+                                isPublic: this.onshape.freeUser,
                                 ownerId: this.onshape.userId,
                                 newName:
                                     (name !== undefined && name) ||
@@ -923,7 +918,7 @@ export class Library extends Preferences {
                     this.proxyDescendantName,
                     TPU.globalTaskInfo.descendantArray
                 );
-                console.log(notPublics)
+                console.log(notPublics);
                 console.log(TPU.globalTaskInfo.descendantArray);
                 console.log(TPU.globalTaskInfo.descendantArray.length + ' descendants');
                 resolve();
@@ -1325,7 +1320,7 @@ export class Library extends Preferences {
                             did: this.bookIconDocument.id,
                             wid: this.bookIconDocument['wvmid'], //might need to wrap this call in getProxyLibrary to make sure these properties exist
                             bTCopyDocumentParams: {
-                                isPublic: false,
+                                isPublic: this.onshape.freeUser,
                                 ownerId: this.onshape.userId, //parent,
                                 newName: libraryName,
                             },
@@ -1402,11 +1397,14 @@ export class Library extends Preferences {
                 },
             };
             // console.log('proxy folder looking like ', proxyFolder);
+            const promises = [];
             if (
                 (parent === undefined || parent.id === library.id) &&
                 skipAddParent !== true
             ) {
-                this.addNodeToProxyLibrary(proxyFolder, undefined, library.id);
+                promises.push(
+                    this.addNodeToProxyLibrary(proxyFolder, undefined, library.id)
+                );
             } else if (parent !== undefined && skipAddParent !== true) {
                 proxyFolder.treeHref = parent.id; // This works for now, cheap fix
                 console.log('parent', parent);
@@ -1415,16 +1413,15 @@ export class Library extends Preferences {
             if (skipUpdateDescendants !== true)
                 this.updateLibraryDescendants(library, 0, [proxyFolder]);
             if (contents !== undefined) {
-                this.setProxyFolder(library, proxyFolder, contents)
-                    .then(() => {
-                        resolve(proxyFolder);
-                    })
-                    .catch((err) => {
-                        _reject(err);
-                    });
-            } else {
-                resolve(proxyFolder);
+                promises.push(this.setProxyFolder(library, proxyFolder, contents));
             }
+            Promise.all(promises)
+                .then(() => {
+                    resolve(proxyFolder);
+                })
+                .catch((err) => {
+                    _reject(err);
+                });
         });
     }
     // TODO: Do we need a setProxyMetaData/getProxyMetaData routine to store extra

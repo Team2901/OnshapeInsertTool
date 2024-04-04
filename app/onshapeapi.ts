@@ -120,6 +120,7 @@ export class OnshapeAPI {
     public access_token: string;
     public refresh_token: string;
     public expires_token: Date;
+    public freeUser = false;
 
     public apiApplicationApi: APIApplicationApi;
     public accountApi: AccountApi;

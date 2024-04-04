@@ -139,7 +139,6 @@ export class App extends BaseApp {
     public loadedlimit = 2500; // Maximum number of items we will load
     public targetDocumentElementInfo: BTDocumentElementInfo = {};
     public appName: string = APP_NAME;
-    public freeUser: boolean = false;
 
     public insertToTarget: (
         documentId: string,
@@ -283,8 +282,7 @@ export class App extends BaseApp {
                     type: 'select',
                 },
             ],
-            userOwned: true,
-            notFreeUser: true
+            notFreeUser: true,
         },
         ADDPROXYDOC: {
             parentType: ['any'],
@@ -303,7 +301,6 @@ export class App extends BaseApp {
                     type: 'select',
                 },
             ],
-            userOwned: true,
             notFreeUser: true,
         },
         REPROXYDOC: {
@@ -417,20 +414,25 @@ export class App extends BaseApp {
     public startApp(): void {
         this.libraries = new Library(this.onshape);
         this.preferences = new Preferences(this.onshape);
+        this.startAppContent();
+    }
+
+    public startAppContent() {
         this.preferences
             .initUserPreferences(this.appName)
             .then((_val) => {
-                if (_val === undefined || _val === null || this.preferences.freeUser) {
-                    if (this.preferences.freeUser) {
-                        this.freeUser = true;
+                if (_val === undefined || _val === null) {
+                    if (this.onshape.freeUser) {
+                        return this.startAppContent();
                     } else {
                         console.error(
                             'Cannot create initallize user preferences. They are not a free user'
                         );
                     }
-                } else {
-                    this.onshape.userId = _val.owner.id;
                 }
+                // else {
+                // this.onshape.userId = _val.owner.id;
+                // }
 
                 // Create the main container
                 var div = createDocumentElement('div', { id: 'apptop' });
@@ -517,7 +519,6 @@ export class App extends BaseApp {
      */
     public saveLastLocation(location: folderLocation): void {
         // console.log(location, '______');
-        if (this.freeUser) return;
         this.preferences.setLastKnownLocation(location.pathToRoot);
     }
     /**
@@ -526,7 +527,6 @@ export class App extends BaseApp {
      */
     public getLastLocation(): Promise<Array<BTGlobalTreeNodeInfo>> {
         return new Promise((resolve, _reject) => {
-            if (this.freeUser) return resolve(undefined);
             this.preferences
                 .getLastKnownLocation()
                 .then((locations) => {
@@ -831,7 +831,6 @@ export class App extends BaseApp {
      */
     private processHomeNode(magicid: string, table: JTTable) {
         const magicinfo = this.magicInfo[magicid];
-        if (magicinfo.notFreeUser === true && this.freeUser === true) return;
         if (!magicinfo.hideFromMenu) {
             const magicNode: BTGlobalTreeNodeInfo = {
                 jsonType: 'magic',
@@ -999,19 +998,21 @@ export class App extends BaseApp {
                 return;
             }
 
-            rowelem.onmouseover = (e) => {
-                waitForTooltip(
-                    rowelem,
-                    () => {
-                        if (this.getActionMenuVisible()) return;
-                        let rect = rowelem.getBoundingClientRect();
-                        this.showPopup(item, rect);
-                    },
-                    () => {
-                        this.hidePopup();
-                    }
-                );
-            };
+            if (item.jsonType !== 'proxy-folder') {
+                rowelem.onmouseover = (e) => {
+                    waitForTooltip(
+                        rowelem,
+                        () => {
+                            if (this.getActionMenuVisible()) return;
+                            let rect = rowelem.getBoundingClientRect();
+                            this.showPopup(item, rect);
+                        },
+                        () => {
+                            this.hidePopup();
+                        }
+                    );
+                };
+            }
             if (selectable) {
                 rowelem.oncontextmenu = (event) => {
                     event.preventDefault();
@@ -1077,7 +1078,7 @@ export class App extends BaseApp {
         }
         const breadcrumbdiv = document.getElementById('breadcrumbs');
         const breadcrumbHeight = (breadcrumbdiv && breadcrumbdiv.clientHeight) || 25;
-        container.style.top = breadcrumbHeight + 'px';
+        container.style.top = breadcrumbdiv.offsetTop + breadcrumbHeight + 'px';
         return container;
     }
     /**
@@ -1192,6 +1193,7 @@ export class App extends BaseApp {
         const popoverMainDiv = createDocumentElement('div', {
             id: 'docinfo',
             class: 'popover popup bs-popover-bottom',
+            style: 'display:none',
         });
         popoverMainDiv.innerHTML = `<div class="popover-body">
             <div id="docinfo_name" class="popname"></div>
@@ -1213,6 +1215,88 @@ export class App extends BaseApp {
 
         parent.appendChild(popoverMainDiv);
     }
+
+    public createFreeUserInfo(parent: HTMLElement): void {
+        const bannerDiv = createDocumentElement('div', {
+            // class:
+            id: 'freeuserbanner',
+        });
+        const bannerButton = createDocumentElement('button', {
+            textContent: '⚠Free User⚠',
+            class: 'btn btn-secondary',
+        });
+        bannerDiv.appendChild(bannerButton);
+
+        bannerButton.addEventListener('click', () => {
+            this.showFreeUserInfo();
+        });
+
+        const popupMainDiv = createDocumentElement('div', {
+            id: 'freeuserpopup',
+            class: 'popover popup bs-popover-bottom',
+            style: 'width:95%border:none;display:none;',
+        });
+
+        const popupDiv = createDocumentElement('div', {
+            class: 'context-menu-list contextmenu-list list-has-icons context-menu-root',
+        });
+
+        const popupTopDiv = createDocumentElement('div', {
+            // style: 'width:100%;height:10%',
+            class: 'document-panel-header',
+        });
+        const popupTopTitle = createDocumentElement('div', {
+            class: 'document-panel-header-title',
+            textContent: 'Free User Information',
+        });
+        popupTopDiv.appendChild(popupTopTitle);
+        const popupTopRight = createDocumentElement('div', {
+            class: 'os-row os-pin-right os-align-center',
+        });
+        const popupHideButton = createSVGIcon('svg-icon-close-x');
+        popupHideButton.classList.add('document-panel-close');
+
+        popupHideButton.addEventListener('click', () => {
+            this.hideFreeUserInfo();
+        });
+        popupTopRight.appendChild(popupHideButton);
+        popupTopDiv.appendChild(popupTopRight);
+
+        const popupTextDiv = createDocumentElement('div', {
+            // style: 'width:100%;height:90%',
+            class: 'document-panel-main-content',
+        });
+        const popupTextP = createDocumentElement('p', {
+            style: 'margin-left:5px',
+            textContent:
+                "Your Onshape Account is on the free plan and doesn't have the ability to create private documents. Your preferences file and any library you make will be public. ",
+        });
+        popupTextDiv.appendChild(popupTextP);
+
+        popupDiv.appendChild(popupTopDiv);
+        popupDiv.appendChild(popupTextDiv);
+
+        popupMainDiv.appendChild(popupDiv);
+
+        parent.insertBefore(popupMainDiv, parent.firstChild);
+        parent.insertBefore(bannerDiv, parent.firstChild);
+    }
+
+    public showFreeUserInfo(): void {
+        const popup = document.getElementById('freeuserpopup');
+        const banner = document.getElementById('freeuserbanner');
+        if (popup && banner) {
+            popup.style.display = 'block';
+            popup.style.top = banner.clientTop + banner.clientHeight + 'px';
+            popup.style.width = '95%';
+            popup.style.border = 'none';
+        }
+    }
+    public hideFreeUserInfo(): void {
+        const popup = document.getElementById('freeuserpopup');
+        if (popup) popup.style.display = 'none';
+    }
+
     /**
      *
      * @param item
@@ -1267,6 +1351,13 @@ export class App extends BaseApp {
 
                 let inputDiv: HTMLElement;
                 let submitElement: HTMLButtonElement;
+                let proxyLibrary: BTGlobalTreeNodeInfo;
+                for (let crumb of this.currentBreadcrumbs) {
+                    if (crumb.jsonType === 'proxy-library') {
+                        proxyLibrary = crumb;
+                        break;
+                    }
+                }
 
                 if (option.input !== undefined) {
                     inputDiv = document.getElementById(optionId + '_inputdiv');
@@ -1275,18 +1366,15 @@ export class App extends BaseApp {
                     ) as HTMLButtonElement;
                 }
 
-                //make sure free user status is right
-                if (option.notFreeUser === true && this.freeUser === true) {
-                    optionElement.parentElement.style.display = 'none';
-                    continue;
-                }
-
                 //makes sure user ownership status is right
                 if (option.userOwned) {
                     if (
-                        (item.owner && item.owner.id) !== this.onshape.userId &&
-                        item.createdBy &&
-                        item.createdBy.id !== this.onshape.userId
+                        ((item.owner && item.owner.id) !== this.onshape.userId &&
+                            item.createdBy &&
+                            item.createdBy.id !== this.onshape.userId) ||
+                        (proxyLibrary &&
+                            proxyLibrary.owner &&
+                            proxyLibrary.owner.id !== this.onshape.userId)
                     ) {
                         optionElement.parentElement.style.display = 'none';
                         continue;
@@ -1520,6 +1608,7 @@ export class App extends BaseApp {
                             inputDiv.style.display = 'flex';
                             submitElement.onclick = (e) => {
                                 e.preventDefault();
+                                this.setInProgress(true);
                                 this.libraries
                                     .createProxyLibrary(
                                         // this.currentBreadcrumbs[0],
@@ -1527,7 +1616,16 @@ export class App extends BaseApp {
                                         inputElement.value
                                     )
                                     .then((library) => {
-                                        this.preferences.addMagicNode(library, 'library');
+                                        this.preferences
+                                            .addMagicNode(library, 'library')
+                                            .then(() => {
+                                                setTimeout(() => {
+                                                    this.setInProgress(false);
+                                                    this.gotoFolder(
+                                                        this.currentBreadcrumbs[0]
+                                                    );
+                                                }, 3000);
+                                            });
                                         this.hideActionMenu();
                                     });
                             };
@@ -1575,7 +1673,7 @@ export class App extends BaseApp {
                                 //         'WHOOPS, this should not have been an availble option'
                                 //     );
                                 // }
-
+                                this.setInProgress();
                                 this.libraries
                                     .getProxyLibrary(undefined, libraryId)
                                     .then((res) => {
@@ -1590,6 +1688,10 @@ export class App extends BaseApp {
                                                     parent
                                                 )
                                                 .then(() => {
+                                                    this.setInProgress(false);
+                                                    this.gotoFolder(
+                                                        this.currentBreadcrumbs[0]
+                                                    );
                                                     this.hideActionMenu();
                                                 });
                                         } else {
@@ -1645,6 +1747,7 @@ export class App extends BaseApp {
                     case 'RELIBDOC': {
                         optionElement.onclick = () => {
                             //item's parent is another proxy-folder
+                            this.setInProgress(true);
                             this.libraries
                                 .removeNodeFromProxyLibrary(
                                     item,
@@ -1652,6 +1755,8 @@ export class App extends BaseApp {
                                     this.currentBreadcrumbs[0].id // works for now, cheap fix
                                 )
                                 .then((res) => {
+                                    this.setInProgress(false);
+                                    this.gotoFolder(this.currentBreadcrumbs[0]);
                                     this.hideActionMenu();
                                 });
                         };
@@ -3509,21 +3614,13 @@ export class App extends BaseApp {
     }
     public processLibrariesNode(
         accessId: string,
+        pathToRoot: BTGlobalTreeMagicNodeInfo[],
         index?: number,
         refreshNodes?: boolean
     ) {
         this.preferences
             .getMagicTypeByIndex(index, 'library', refreshNodes) //only refresh if we are getting first node
             .then((res: BTGlobalTreeNodeInfo[]) => {
-                const pathToRoot = [
-                    {
-                        jsonType: 'magic',
-                        resourceType: 'magic',
-                        id: 'LI',
-                        name: 'Libraries',
-                    },
-                ];
-                this.setBreadcrumbs(pathToRoot);
                 if (res === undefined || res === null) {
                     return;
                 }
@@ -3542,21 +3639,13 @@ export class App extends BaseApp {
      */
     public processFavoritedNode(
         accessId: string,
+        pathToRoot: BTGlobalTreeMagicNodeInfo[],
         index?: number,
         refreshNodes?: boolean
     ) {
         this.preferences
             .getMagicTypeByIndex(index, 'favorited', refreshNodes) //only refresh if we are getting first node
             .then((res: BTGlobalTreeNodeInfo[]) => {
-                const pathToRoot = [
-                    {
-                        jsonType: 'magic',
-                        resourceType: 'magic',
-                        id: 'FV',
-                        name: 'Favorited',
-                    },
-                ];
-                this.setBreadcrumbs(pathToRoot);
                 if (res === undefined || res === null) {
                     return;
                 }
@@ -3575,21 +3664,13 @@ export class App extends BaseApp {
      */
     public processRecentlyInsertedNode(
         accessId: string,
+        pathToRoot: BTGlobalTreeMagicNodeInfo[],
         index?: number,
         refreshNodes?: boolean
     ) {
         this.preferences
             .getMagicTypeByIndex(index, 'recentlyInserted', refreshNodes) //only refresh if we are getting first node
             .then((res: BTGlobalTreeNodeInfo[]) => {
-                const pathToRoot = [
-                    {
-                        jsonType: 'magic',
-                        resourceType: 'magic',
-                        id: 'RI',
-                        name: 'Recently Inserted',
-                    },
-                ];
-                this.setBreadcrumbs(pathToRoot);
                 if (res === undefined || res === null) {
                     return;
                 }
@@ -3609,6 +3690,7 @@ export class App extends BaseApp {
      */
     public processGlobalLibrariesNode(
         accessId: string,
+        pathToRoot: BTGlobalTreeMagicNodeInfo[],
         index?: number,
         refreshNodes?: boolean
     ) {
@@ -3618,15 +3700,7 @@ export class App extends BaseApp {
         }
         Promise.all(documentRequests).then((documents: BTGlobalTreeNodeInfo[]) => {
             console.log(documents);
-            const pathToRoot = [
-                {
-                    jsonType: 'magic',
-                    resourceType: 'magic',
-                    id: 'GL',
-                    name: 'Global Libraries',
-                },
-            ];
-            this.setBreadcrumbs(pathToRoot);
+
             // if (res === undefined || res === null) {
             //     return;
             // }
@@ -3649,52 +3723,79 @@ export class App extends BaseApp {
      */
     public processHelpInstructionsNode(
         accessId: string,
+        pathToRoot: BTGlobalTreeMagicNodeInfo[],
         index?: number,
         refreshNodes?: boolean
     ) {
-        const pathToRoot = [
-            {
-                jsonType: 'magic',
-                resourceType: 'magic',
-                id: 'HI',
-                name: 'Help/Instructions',
-            },
-        ];
-        this.setBreadcrumbs(pathToRoot);
-        // if (res === undefined || res === null) {
-        //     return;
-        // }
         //fetch md file
         fetch('./' + this.appName + '/INSTRUCTIONS_HELP.md').then((res) => {
             if (res === undefined) return;
-            res.text().then((res2) => this.processMarkdownFile(res2, accessId));
+            res.text().then((res2) => {
+                this.processMarkdownFile(res2, accessId);
+                if (this.onshape.freeUser)
+                    this.createFreeUserInfo(document.getElementById('dump'));
+            });
         });
-        // .getMagicTypeByIndex(index, 'globalLibraries', refreshNodes) //only refresh if we are getting first node
-        // .then((res: BTGlobalTreeNodeInfo[]) => {
-
-        // });
     }
     /**
      * Process a single node entry
      * @param uri URI node for the entries to be loaded
      */
     public processMagicNode(magic: string, accessId: string) {
+        let pathToRoot = [];
         if (magic === 'RI') {
-            this.processRecentlyInsertedNode(accessId, 0, true);
-            return;
+            pathToRoot = [
+                {
+                    jsonType: 'magic',
+                    resourceType: 'magic',
+                    id: 'RI',
+                    name: 'Recently Inserted',
+                },
+            ];
+            this.processRecentlyInsertedNode(accessId, pathToRoot, 0, true);
         } else if (magic === 'FV') {
-            this.processFavoritedNode(accessId, 0, true);
-            return;
+            pathToRoot = [
+                {
+                    jsonType: 'magic',
+                    resourceType: 'magic',
+                    id: 'FV',
+                    name: 'Favorited',
+                },
+            ];
+            this.processFavoritedNode(accessId, pathToRoot, 0, true);
         } else if (magic === 'LI') {
-            this.processLibrariesNode(accessId, 0, true);
-            return;
+            pathToRoot = [
+                {
+                    jsonType: 'magic',
+                    resourceType: 'magic',
+                    id: 'LI',
+                    name: 'Libraries',
+                },
+            ];
+            this.processLibrariesNode(accessId, pathToRoot, 0, true);
         } else if (magic === 'GL') {
-            this.processGlobalLibrariesNode(accessId, 0, true);
-            return;
+            pathToRoot = [
+                {
+                    jsonType: 'magic',
+                    resourceType: 'magic',
+                    id: 'GL',
+                    name: 'Global Libraries',
+                },
+            ];
+            this.processGlobalLibrariesNode(accessId, pathToRoot, 0, true);
         } else if (magic === 'HI') {
-            this.processHelpInstructionsNode(accessId);
-            return;
+            pathToRoot = [
+                {
+                    jsonType: 'magic',
+                    resourceType: 'magic',
+                    id: 'HI',
+                    name: 'Help/Instructions',
+                },
+            ];
+            this.processHelpInstructionsNode(accessId, pathToRoot);
         }
+
+        if (pathToRoot.length !== 0) return this.setBreadcrumbs(pathToRoot);
         // uri: string) {
         // Get Onshape to return the list
         this.onshape.globalTreeNodesApi
@@ -3743,11 +3844,23 @@ export class App extends BaseApp {
             }
             case 'magic': {
                 if (info.pathToRoot[0].id === 'RI') {
-                    this.processRecentlyInsertedNode(accessId, parseInt(info.next));
+                    this.processRecentlyInsertedNode(
+                        accessId,
+                        info.pathToRoot,
+                        parseInt(info.next)
+                    );
                 } else if (info.pathToRoot[0].id === 'FV') {
-                    this.processFavoritedNode(accessId, parseInt(info.next));
+                    this.processFavoritedNode(
+                        accessId,
+                        info.pathToRoot,
+                        parseInt(info.next)
+                    );
                 } else if (info.pathToRoot[0].id === 'LI') {
-                    this.processLibrariesNode(accessId, parseInt(info.next));
+                    this.processLibrariesNode(
+                        accessId,
+                        info.pathToRoot,
+                        parseInt(info.next)
+                    );
                 }
                 break;
             }
@@ -3893,7 +4006,7 @@ export class App extends BaseApp {
                 .getProxyLibrary(undefined, item.id)
                 .then((res) => {
                     this.addBreadcrumbNode(item);
-                    this.setBreadcrumbs(this.currentBreadcrumbs, teamroot);
+                    // this.setBreadcrumbs(this.currentBreadcrumbs, teamroot);
                     this.ProcessNodeResults(
                         {
                             items: res.contents,
@@ -3919,7 +4032,7 @@ export class App extends BaseApp {
                     this.addBreadcrumbNode(item);
                     //use breadcrumbs for library
                     this.libraries.getProxyFolder(library, item.id).then((res) => {
-                        this.setBreadcrumbs(this.currentBreadcrumbs, teamroot);
+                        // this.setBreadcrumbs(this.currentBreadcrumbs, teamroot);
                         this.ProcessNodeResults(
                             {
                                 items: res,

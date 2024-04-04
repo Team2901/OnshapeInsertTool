@@ -88,9 +88,34 @@ export class BaseApp {
      * Create the initial page showing that we are initializing
      */
     public showInitializing() {
-        var h2 = document.createElement('h2');
-        h2.innerHTML = 'Initializing';
-        this.setAppElements(h2);
+        // var h2 = document.createElement('h2');
+        // h2.innerHTML = 'Initializing';
+        // this.setAppElements(h2);
+        const container = createDocumentElement('div', {
+            style: `width:${document.documentElement.clientWidth}px;height:${document.documentElement.clientHeight}px;display:flex;justify-content:center;align-content:center;align-items:center;`,
+        });
+        const style = createDocumentElement('style');
+        style.innerHTML = `
+        @keyframes osSpinnerSpinning {
+          0% {
+            -webkit-transform: rotate(0deg);
+            transform: rotate(0deg);
+          }
+          100% {
+            -webkit-transform: rotate(1turn);
+            transform: rotate(1turn);
+          }
+        }`;
+        const spinner = createDocumentElement('div', {
+            class: 'thumbnail-spinner os-spinner-medium os-spinner-spinning',
+            style: `-webkit-animation:osSpinnerSpinning 1.1s linear infinite;animation:
+             osSpinnerSpinning 1.1s linear infinite;border: 1.1em solid rgba(22,81,176,.2);
+             border-left-color: #1651b0;border-radius: 50%;height: 10em;
+             -webkit-transform:translateZ(0);transform: translateZ(0);width: 10em;font-size: 3px;`,
+        });
+        container.appendChild(style);
+        container.appendChild(spinner);
+        this.setAppElements(container);
     }
     /**
      * Initialize the app because we have gotten permission from Onshape to access content
@@ -229,6 +254,24 @@ export class BaseApp {
             });
         });
     }
+
+    // /**
+    // * Doesn't work because cannot get session info
+    //  * Fixes onshape userId and adds freeUser boolean
+    //  * @returns
+    //  */
+    // public patchOnshapeConfig(): Promise<void>{
+    //   return new Promise((resolve,reject)=>{
+    //     this.onshape.userApi.sessionInfo({}).then((res) => {
+    //       if(res === undefined || res === null || (res && res.id === undefined))reject("Cannot get session info");
+    //       this.onshape.userId = res.id;
+    //       if(res.planGroup === "Free")this.onshape.freeUser = true;
+    //       resolve();
+    //     })
+    //   })
+    // }
+    /**
+
     /**
      * The main entry point for an app
      */
@@ -238,6 +281,7 @@ export class BaseApp {
      * @param reason Initialization failure reason
      */
     public failApp(reason: string): void {
+        console.warn(reason);
         var div = document.createElement('div');
         var h2 = document.createElement('h2');
         h2.innerHTML = 'Unable to Start Application';

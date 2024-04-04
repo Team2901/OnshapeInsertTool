@@ -41,8 +41,6 @@ import {
 import { magicIconInfo } from './app';
 import { OnshapeSVGIcon } from './onshape/svgicon';
 
-const PREFERENCE_FILE_NAME = '⚙ Preferences ⚙';
-
 export interface BTGlobalTreeProxyInfo extends BTGlobalTreeNodeInfo {
     // jsonType = 'proxy-library', 'proxy-folder', or 'proxy-element'
     wvm?: typeof GetAssociativeDataWvmEnum;
@@ -91,7 +89,7 @@ export class Preferences {
     public onshape: OnshapeAPI;
     public userPreferencesInfo: BTGlobalTreeProxyInfo = undefined;
     public newUser: boolean = false;
-    public freeUser: boolean = false;
+    public preferenceFileName = '⚙ Preferences ⚙';
 
     //magic nodes cache for getting by index
     magicNodes: { [name: string]: BTGlobalTreeNodeInfo[] } = {
@@ -281,7 +279,7 @@ export class Preferences {
         limit?: number
     ): Promise<boolean> {
         return new Promise((resolve, _reject) => {
-            if (this.freeUser) return resolve(false);
+            // if (this.freeUser) return resolve(false);
             const BTGType = this.magicTypeToBTGType[magicType];
             this.getAllOfMagicType(magicType).then((nodes: BTGlobalTreeNodeInfo[]) => {
                 const newNodes: BTGlobalTreeNodeInfo[] = [];
@@ -324,7 +322,7 @@ export class Preferences {
         libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
     ): Promise<boolean> {
         return new Promise((resolve, _reject) => {
-            if (this.freeUser) return resolve(false);
+            // if (this.freeUser) return resolve(false);
             const BTGType = this.magicTypeToBTGType[magicType];
             this.getAllOfMagicType(magicType, libInfo).then(
                 (nodes: BTGlobalTreeNodeInfo[]) => {
@@ -495,7 +493,7 @@ export class Preferences {
             info = param2;
         }
         return new Promise((resolve, _reject) => {
-            if (this.freeUser) return resolve(false);
+            // if (this.freeUser) return resolve(false);
             this.getAppJson(libInfo)
                 .then((res) => {
                     let pref_name: string;
@@ -703,95 +701,143 @@ export class Preferences {
 
     /**
      * Retrieve the user preferences document which should be in the top level folder of Onshape
-     * for this user.
+     * for this user. If the document does not exist, create the document for the user.
      */
     public getPreferencesDoc(): Promise<BTGlobalTreeProxyInfo> {
         return new Promise((resolve, reject) => {
-            this.onshape.documentApi
-                .search({
-                    bTDocumentSearchParams: {
-                        ownerId: this.onshape.userId,
-                        limit: 100,
-                        when: 'LATEST',
-                        sortColumn: '',
-                        sortOrder: '',
-                        rawQuery: 'type:document name:⚙ Preferences ⚙',
-                        documentFilter: 0,
-                    },
+            this.findPreferencesDoc().then((document) => {
+                if (document !== undefined && document !== null) {
+                    this.onshape.userId = document.owner.id;
+                    this.preferenceFileName = document.name;
+                    if (this.preferenceFileName !== "⚙ Preferences ⚙") {
+                        //file name must include their id
+                        this.onshape.freeUser = true;
+                    }
+                    this.userPreferencesInfo = BTGlobalTreeProxyInfoJSONTyped(
+                        { id: document.id, owner: document.owner },
+                        true
+                    );
+
+                    this.onshape.documentApi
+                        .getDocumentWorkspaces({ did: document.id })
+                        .then((res) => {
+                            this.userPreferencesInfo.wvmid = res[0].id;
+                            this.userPreferencesInfo.wvm = GetAssociativeDataWvmEnum['w'];
+
+                            resolve(this.userPreferencesInfo);
+                        })
+                        .catch((err) => {
+                            reject(err);
+                        });
+                } else {
+                    // The user preferences document does not exist, so make a new one and return the
+                    // BTG info for the newly created document.
+                    this.onshape.documentApi
+                        .createDocument({
+                            bTDocumentParams: {
+                                // ownerId: this.onshape.userId,
+                                name: this.preferenceFileName,
+                                isPublic: this.onshape.freeUser,
+                                description:
+                                    'Document used to store application preferences',
+                            },
+                        })
+                        .then((res) => {
+                            if (
+                                res === undefined ||
+                                res === null ||
+                                (res && res.id === undefined)
+                            ) {
+                                console.log(res);
+                                // if (res['code'] === 409) {
+                                this.onshape.freeUser = true;
+                                return resolve(undefined);
+                            } else {
+                                if (
+                                    res.owner === null ||
+                                    res.owner === undefined ||
+                                    (res.owner && !res.owner.id)
+                                )
+                                    console.error(
+                                        'Created preferences file missing owner information'
+                                    );
+                                console.log(
+                                    'Created new preferences document since it did not exist.'
+                                );
+                                this.newUser = true;
+                                this.onshape.userId = res.owner.id;
+                                this.userPreferencesInfo = BTGlobalTreeProxyInfoJSONTyped(
+                                    {
+                                        id: res.id,
+                                        wvmid: res.defaultWorkspace.id,
+                                        wvm: GetAssociativeDataWvmEnum['w'],
+                                    },
+                                    true
+                                );
+                                if (this.onshape.freeUser) {
+                                    //fix file name
+                                    this.preferenceFileName =
+                                        '⚙ Preferences ' + this.onshape.userId + '⚙';
+                                    this.onshape.documentApi.updateDocumentAttributes({
+                                        did: res.id,
+                                        bTDocumentParams: {
+                                            name: this.preferenceFileName,
+                                        },
+                                    });
+                                }
+                                resolve(this.userPreferencesInfo);
+                            }
+                        })
+                        .catch((err) => {
+                            reject(err);
+                        });
+                }
+            });
+        });
+    }
+
+    public findPreferencesDoc(offset?: number): Promise<BTGlobalTreeNodeInfo> {
+        const limit = 50;
+        return new Promise((resolve, reject) => {
+            offset = offset !== undefined && offset !== null ? offset : 0;
+            this.onshape.globalTreeNodesApi
+                .globalTreeNodesMagic({
+                    mid: '2',
+                    offset,
+                    limit,
+                    getPathToRoot: true,
+                    includeApplications: false,
+                    includeAssemblies: true,
+                    includeBlobs: false,
+                    includeFSComputedPartPropertyFunctions: false,
+                    includeFSTables: false,
+                    includeFeatureStudios: false,
+                    includeFeatures: false,
+                    includeFlattenedBodies: true,
+                    includePartStudios: false,
+                    includeParts: true,
+                    includeReferenceFeatures: false,
+                    includeSketches: true,
+                    includeSurfaces: true,
+                    includeVariableStudios: false,
+                    includeVariables: false,
+                    includeWires: false,
                 })
                 .then((res) => {
-                    this.getDocFromQuery(res).then((res2) => {
-                        resolve(res2);
-                    });
+                    const items = (res.items as BTGlobalTreeNodeInfo[]).filter(
+                        (items) => items.name.indexOf('⚙ Preferences ') != -1
+                    );
+                    if (items.length > 0 && items[0].owner) {
+                        return resolve(items[0]);
+                    }
+                    if (res.items.length === limit) {
+                        return resolve(this.findPreferencesDoc(offset + limit));
+                    }
+                    resolve(undefined);
                 })
                 .catch((err) => {
                     reject(err);
                 });
-        });
-    }
-
-    /**
-     * Retrieve the user preferences document which should be in the top level folder of Onshape
-     * for this user. If the document does not exists, create the document for the user.
-     */
-    public getDocFromQuery(res): Promise<BTGlobalTreeProxyInfo> {
-        return new Promise((resolve, reject) => {
-            if (res.items.length > 0) {
-                this.userPreferencesInfo = BTGlobalTreeProxyInfoJSONTyped(
-                    { id: res.items[0].id, owner: res.items[0].owner },
-                    true
-                );
-
-                this.onshape.documentApi
-                    .getDocumentWorkspaces({ did: res.items[0].id })
-                    .then((res) => {
-                        this.userPreferencesInfo.wvmid = res[0].id;
-                        this.userPreferencesInfo.wvm = GetAssociativeDataWvmEnum['w'];
-
-                        resolve(this.userPreferencesInfo);
-                    })
-                    .catch((err) => {
-                        reject(err);
-                    });
-            } else {
-                // The user preferences document does not exist, so make a new one and return the
-                // BTG info for the newly created document.
-                this.onshape.documentApi
-                    .createDocument({
-                        bTDocumentParams: {
-                            ownerId: this.onshape.userId,
-                            name: '⚙ Preferences ⚙',
-                            description: 'Document used to store application preferences',
-                        },
-                    })
-                    .then((res) => {
-                        if (
-                            res === undefined ||
-                            res === null ||
-                            (res && res.id === undefined)
-                        ) {
-                            //Most likely a free account
-                            this.freeUser = true;
-                            return resolve(undefined);
-                        }
-                        console.log(
-                            'Created new preferences document since it did not exist.'
-                        );
-                        this.newUser = true;
-                        this.userPreferencesInfo = BTGlobalTreeProxyInfoJSONTyped(
-                            {
-                                id: res.id,
-                                wvmid: res.defaultWorkspace.id,
-                                wvm: GetAssociativeDataWvmEnum['w'],
-                            },
-                            true
-                        );
-                        resolve(this.userPreferencesInfo);
-                    })
-                    .catch((err) => {
-                        reject(err);
-                    });
-            }
         });
     }
 
