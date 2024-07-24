@@ -82,6 +82,7 @@ type createThumbnailOptions = {
     retry?: boolean;
     retryInterval?: number;
     id?: string;
+    thumbnailId?: string;
 };
 
 // A function to notify in the case of catastrophic failure
@@ -433,6 +434,7 @@ export class OnshapeAPI {
             retry = false,
             retryInterval = 2,
             id = undefined,
+            thumbnailId = undefined
         } = options || {};
         // // Override any defaults
         // if (options !== undefined) {
@@ -486,9 +488,11 @@ export class OnshapeAPI {
                 }
             }
         }
-        // if (retry) {
+        if(thumbnailId !== undefined && thumbnailId !== null)imageURL = `${this.myserver}/api/thumbnails/${thumbnailId}/s/70x40`;
+        // if (retry) {s
         //     imageURL += '&rejectEmpty=true';
         // }
+        // console.log(options, imageURL);
         const imgChildThumbnail = createDocumentElement('img', {
             src: 'https://cad.onshape.com/images/default-document.png',
             width: String(width),

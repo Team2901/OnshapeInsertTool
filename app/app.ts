@@ -29,6 +29,7 @@ import { BaseApp } from './baseapp';
 import {
     BTDocumentElementInfo,
     BTDocumentSummaryInfo,
+    BTESVersionWorkspaceChoice,
     BTFSValueUndefined2003FromJSON,
     BTFlatSheetMetalFilter3018AllOfFromJSONTyped,
     BTGlobalTreeMagicNodeInfo,
@@ -54,6 +55,7 @@ import {
     BTThumbnailInfo,
     FolderApi,
     GBTElementType,
+    GetConfigurationWvmEnum,
     GetInsertablesRequest,
     GetWMVEPsMetadataWvmEnum,
     ObjectId,
@@ -91,6 +93,12 @@ export interface configInfo {
     type: string;
     id: string;
     value: string;
+}
+
+interface SearchInfoNode {
+    id: string;
+    partNumber?: string;
+    name: string;
 }
 
 export interface configInsertInfo {
@@ -159,8 +167,8 @@ export class App extends BaseApp {
     ];
 
     public magicInfo: { [item: string]: magicIconInfo } = {
-        '0': { icon: 'svg-icon-recentlyOpened', label: 'Recently Opened' },
-        '1': { icon: 'svg-icon-myDocuments', label: 'My Onshape', search: true },
+        '0': { icon: 'svg-icon-recentlyOpened', label: 'Recently Opened', search: true },
+        '1': { icon: 'svg-icon-myDocuments', label: 'My Onshape' /*, search: true*/ },
         '2': { icon: 'svg-icon-createdByMe', label: 'Created by Me', search: true },
         '3': { icon: 'svg-icon-public', label: 'Public', search: true },
         '4': { icon: 'svg-icon-trash', label: 'Trash' },
@@ -179,7 +187,7 @@ export class App extends BaseApp {
         '8': { icon: 'svg-icon-help-ios', label: 'IOS Tutorials' },
         '9': { icon: 'svg-icon-help-android', label: 'Android Tutorials' },
         '10': { icon: 'svg-icon-label', label: 'Labels', hideFromMenu: true },
-        '11': { icon: 'svg-icon-team', label: 'Teams' },
+        '11': { icon: 'svg-icon-team', label: 'Teams' /*, search: true */ },
         '12': { icon: 'svg-icon-sharedWithMe', label: 'Shared with me' },
         '13': {
             icon: 'svg-icon-document-upload-cloud',
@@ -195,9 +203,10 @@ export class App extends BaseApp {
         LI: { icon: 'svg-icon-libraries', label: 'My Libraries', search: true },
         GL: { icon: 'svg-icon-library-public', label: 'Global Libraries', search: true },
         HI: { icon: 'svg-icon-help-button', label: 'Help/Instructions' },
+        CD: { icon: 'svg-icon-document', label: 'Current Document' },
     };
     public homeGrouping: homeGroupInfo[] = [
-        { title: '', children: ['LI', 'FV', 'RI', 'GL', '11', 'HI'] },
+        { title: '', children: ['LI', 'FV', 'RI', 'GL', '11', 'HI', 'CD'] },
         { title: '━━━━━━━━', children: ['1', '0', '2', '12', '3'] },
         { title: 'Other', children: ['5', '6', '7', '8', '9', '14'] },
     ];
@@ -921,13 +930,18 @@ export class App extends BaseApp {
     }
 
     private checkSearchBarEnabled(newFolder: BTGlobalTreeNodeInfo): void {
-        switch (newFolder.jsonType) {
+        // console.log(newFolder);
+        switch (newFolder.jsonType || newFolder.resourceType) {
             case 'home': {
                 this.hideSearchBar();
                 break;
             }
-            case 'magic':
-                if (newFolder.id !== 'GL' && newFolder.id !== 'LI') break;
+            case 'magic': {
+                if (this.magicInfo[newFolder.id].search !== true) break;
+                // if (newFolder.id !== 'GL' && newFolder.id !== 'LI') break;
+            }
+            case 'team-summary':
+            case 'proxy-library':
             case 'search': {
                 this.showSearchBar();
                 break;
@@ -1903,11 +1917,11 @@ export class App extends BaseApp {
                                 });
                             inputLibElement.onchange = () => {
                                 const libraryId = inputLibElement.value;
-                                console.log(libraryId);
+                                // console.log(libraryId);
                                 this.libraries
                                     .getProxyLibrary(undefined, libraryId, true)
                                     .then((library) => {
-                                        console.log(library);
+                                        // console.log(library);
                                         const descendants = library.descendants;
                                         if (!descendants) return;
                                         const folderOptions: Array<{
@@ -2055,11 +2069,11 @@ export class App extends BaseApp {
                             inputLibElement.onchange = () => {
                                 selectedLibrary = undefined;
                                 const libraryId = inputLibElement.value;
-                                console.log(libraryId);
+                                // console.log(libraryId);
                                 this.libraries
                                     .getProxyLibrary(undefined, libraryId, true)
                                     .then((library) => {
-                                        console.log(library);
+                                        // console.log(library);
                                         selectedLibrary = library.library;
                                         const descendants = library.descendants;
                                         if (!descendants) return;
@@ -3049,6 +3063,11 @@ export class App extends BaseApp {
             thumbnailInfo['elementType'] = item.elementType;
             const imgChildThumbnail = this.onshape.createThumbnailImage(thumbnailInfo, {
                 id: `ci${index}`,
+                thumbnailId:
+                    item.predictableThumbnailId !== undefined &&
+                    item.predictableThumbnailId !== null
+                        ? item.predictableThumbnailId
+                        : undefined,
             });
             childThumbnailDiv.append(imgChildThumbnail);
             const childNameDiv = createDocumentElement('div', {
@@ -3253,7 +3272,7 @@ export class App extends BaseApp {
             // Second we need to get all the configuration information for the item
             const itemConfigPromise = this.onshape.elementApi.getConfiguration({
                 did: item.documentId,
-                wvm: wvm,
+                wvm: wvm as GetConfigurationWvmEnum,
                 wvmid: wvmid,
                 eid: item.elementId,
             });
@@ -3459,7 +3478,7 @@ export class App extends BaseApp {
         nodeInfo: BTGlobalTreeNodeInfo,
         insertInfo: configInsertInfo
     ) {
-        console.log('processing', nodeInfo, insertInfo);
+        // console.log('processing', nodeInfo, insertInfo);
         let documentNodeInfo: BTGlobalTreeNodeInfo = nodeInfo;
         // this.currentNodes.items.forEach((nodeItem: BTGlobalTreeNodeInfo)=>{
         //   if(nodeItem.id == item.documentId)return documentNodeInfo = nodeItem;
@@ -3575,7 +3594,7 @@ export class App extends BaseApp {
             // Second we need to get all the configuration information for the item
             const config = await this.onshape.elementApi.getConfiguration({
                 did: item.documentId,
-                wvm: wvm,
+                wvm: wvm as GetConfigurationWvmEnum,
                 wvmid: wvmid,
                 eid: item.elementId,
             });
@@ -3841,49 +3860,175 @@ export class App extends BaseApp {
     }
 
     public processInsertablesSearch(
-        parentId: string,
+        currentItem: BTGlobalTreeNodeInfo,
         match: string,
         accessId: string
     ): Promise<boolean> {
         return new Promise((resolve, reject) => {
+            let context = 0;
+            let ownerId = this.onshape.userId;
+            if (currentItem.resourceType === 'magic') {
+                context = {
+                    // '0': 6, //Owned By Me
+                    '0': 5, //Recently Opened
+                    // '1':
+                    '2': 1,
+                    '3': 4,
+                    '4': 3, //trash
+                    '11': 9,
+                    '12': 2,
+                }[currentItem.id];
+                // context = parseInt(currentItem.id);
+            } else if (currentItem.resourceType === 'team') {
+                context = 9;
+                ownerId = currentItem.id;
+            } else {
+                console.log('other item', currentItem);
+            }
+            let offset =
+                this.currentInsertablesSearch && this.currentInsertablesSearch.offset;
+            if (!offset || offset < 0) offset = 0;
+            // console.log('Document Filter: ' + context);
             this.onshape.documentApi
-                .search({ bTDocumentSearchParams: {ownerId: this.onshape.userId,
-                  limit: 100,
-                  when: 'LATEST',
-                  sortColumn: '',
-                  sortOrder: '',
-                  rawQuery: 'type:document name:⚙ Preferences ⚙',
-                  documentFilter: 0,} })
-                .then((results) => {
-                    if (results === undefined || results === null) return resolve(false);
-                    // if(!results.items || (results.items && results.items.length ===0))return resolve(false);
+                .search({
+                    bTDocumentSearchParams: {
+                        documentFilter: context,
+                        foundIn: 'w' as BTESVersionWorkspaceChoice,
+                        ownerId,
+                        limit: 30,
+                        when: 'LATEST',
+                        sortColumn: '',
+                        sortOrder: '',
+                        rawQuery: '_all:' + match + ' type:all',
+                        offset,
+                        // rawQuery: 'type:document name:' + match,
+                    },
+                })
+                .then((res) => {
+                    this.currentInsertablesSearch.offset = offset + 30;
+                    // this.currentSearchItems = (
+                    //     (res['items'] || []) as Array<
+                    //         SearchInfoNode | BTGlobalTreeNodeInfo
+                    //     >
+                    // ).concat(this.currentSearchItems);
+                    this.currentSearchItems = this.currentSearchItems.concat(
+                        res['items'] || []
+                    );
+                    if (offset !== 0) return resolve(true);
+                    resolve(this.getSearchItemByIndex(accessId, 0));
                 });
         });
     }
 
+    // public processInsertablesSearch(
+    //     currentItem: BTGlobalTreeNodeInfo,
+    //     match: string,
+    //     accessId: string
+    // ): Promise<boolean> {
+    //     return new Promise((resolve, reject) => {
+    //         let context = 0;
+    //         if (currentItem.resourceType == 'magic') {
+    //             context = {
+    //                 '0': 5,
+    //                 // '1':
+    //                 '2': 1,
+    //                 '3': 4,
+    //                 '11': 9,
+    //             }[currentItem.id];
+    //         } else {
+    //             console.log('other item', currentItem);
+    //         }
+    //         /**
+    //          * Filters:
+    //          * 1 - Created by me
+    //          * 2 - Shared with me
+    //          * 3 - imported (i think)
+    //          * 4 - Public
+    //          * 5 - Recently opened
+    //          * 6 - Owned by me
+    //          * 7 - Company
+    //          * 8 - Onshape owned documents official (i think)
+    //          * 9 - Team
+    //          * 10 - Label (needs label param)
+    //          * 11 - All
+    //          * 12, 13 - something (didn't return anything)
+    //          * 14 - Featurescript
+    //          * 15, 16 - More Featurescript
+    //          * 17 - Something about referencedByParameter
+    //          * Everything else - Idk, something (recently edited?, not public)
+    //          */
+    //         this.onshape.documentApi
+    //             .getInsertablesQuery({
+    //                 filter: context, //9 for team, 11 for all
+    //                 // getPathToRoot: true,
+    //                 //owner & ownerId:
+    //                 includeApplications: false,
+    //                 includeAssemblies: true,
+    //                 includeBlobs: false,
+    //                 includeFSComputedPartPropertyFunctions: false,
+    //                 includeFSTables: false,
+    //                 includeFeatureStudios: false,
+    //                 includeFeatures: false,
+    //                 includeFlattenedBodies: true,
+    //                 includePartStudios: false,
+    //                 includeParts: true,
+    //                 includeReferenceFeatures: false,
+    //                 includeSketches: true,
+    //                 includeSurfaces: true,
+    //                 includeVariableStudios: false,
+    //                 includeVariables: false,
+    //                 includeWires: false,
+    //                 limit: 30,
+    //                 offset: 0,
+    //                 q: '_all:' + match + ' type:all',
+    //             })
+    //             .then((results) => {
+    //                 if (results === undefined || results === null) return resolve(false);
+    //                 // if(!results.items || (results.items && results.items.length ===0))return resolve(false);
+    //                 resolve(this.getSearchItemByIndex(accessId, 0));
+    //             });
+    //     });
+    // }
+
     public processProxyLibrarySearch(
         id: string,
         match: string,
-        accessId: string
+        accessId: string,
+        skipRender?: boolean
     ): Promise<boolean> {
         return new Promise((resolve, reject) => {
             this.libraries.getLibrarySearchInfo(id).then((res) => {
                 if (res === undefined) res = [];
-                let items = res as unknown as Array<{
-                    id: string;
-                    partNumber?: string;
-                    name: string;
-                }>;
+                let items = res as SearchInfoNode[];
+
+                console.log('Items: ', items);
 
                 const re = new RegExp(match);
-                this.currentSearchItems = this.currentSearchItems.concat(
-                    items.filter(
-                        (item) =>
-                            (
-                                item.name.toLowerCase() + (item.partNumber + ' ' || '')
-                            ).match(re) !== null
-                    ) as Array<{ id: string; partNumber: string; name: string }>
-                );
+                this.currentSearchItems = (
+                    this.currentSearchItems.concat(
+                        items.filter(
+                            (item) =>
+                                (
+                                    item.name.toLowerCase() +
+                                    (item.partNumber + ' ' || '')
+                                ).match(re) !== null
+                        ) as Array<{ id: string; partNumber: string; name: string }>
+                    ) as SearchInfoNode[]
+                )
+                    .sort(
+                        (a, b) =>
+                            (a.name.toLowerCase().indexOf('configurable') > 0 ? 0 : 1) -
+                            (b.name.toLowerCase().indexOf('configurable') > 0 ? 0 : 1)
+                    )
+                    .sort(
+                        (a, b) =>
+                            (a.name.toLowerCase() + (a.partNumber + ' ' || '')).match(re)
+                                .length -
+                            (b.name.toLowerCase() + (b.partNumber + ' ' || '')).match(re)
+                                .length
+                    );
+                // console.log(this.currentSearchItems);
+                if (skipRender) return resolve(this.currentSearchItems.length > 0);
                 resolve(this.getSearchItemByIndex(accessId, 0));
             });
         });
@@ -3908,6 +4053,20 @@ export class App extends BaseApp {
                     this.createFreeUserInfo(document.getElementById('dump'));
             });
         });
+    }
+
+    public processCurrentDocumentNode(
+        accessId: string,
+        pathToRoot: BTGlobalTreeMagicNodeInfo[]
+    ) {
+        this.onshape.documentApi
+            .getDocument({ did: this.onshape.documentId })
+            .then((res) => {
+                if (res === undefined && res === null)
+                    console.error("Active document doesn't exist");
+                this.onshape.globalTreeNodesApi;
+                this.checkInsertItem(res, this.loaded, undefined, true, accessId);
+            });
     }
     /**
      * Process a single node entry
@@ -3965,43 +4124,31 @@ export class App extends BaseApp {
                 },
             ];
             this.processHelpInstructionsNode(accessId, pathToRoot);
+        } else if (magic === 'CD') {
+            pathToRoot = [
+                {
+                    jsonType: 'magic',
+                    resourceType: 'magic',
+                    id: 'CD',
+                    name: 'Current Document',
+                },
+            ];
+            this.processCurrentDocumentNode(accessId, pathToRoot);
         }
 
         if (pathToRoot.length !== 0) return this.setBreadcrumbs(pathToRoot);
         // uri: string) {
         // Get Onshape to return the list
-        this.onshape.globalTreeNodesApi
-            .globalTreeNodesMagic({
-                mid: magic,
-                getPathToRoot: true,
-                includeApplications: false,
-                includeAssemblies: true,
-                includeBlobs: false,
-                includeFSComputedPartPropertyFunctions: false,
-                includeFSTables: false,
-                includeFeatureStudios: false,
-                includeFeatures: false,
-                includeFlattenedBodies: true,
-                includePartStudios: false,
-                includeParts: true,
-                includeReferenceFeatures: false,
-                includeSketches: true,
-                includeSurfaces: true,
-                includeVariableStudios: false,
-                includeVariables: false,
-                includeWires: false,
-            })
-            .then((res) => {
-                this.setBreadcrumbs(res.pathToRoot);
-                this.ProcessNodeResults(res, accessId);
-            })
-            .catch((err) => {
-                // Something went wrong, some mark us as no longer running.
-                console.log(`**** Call failed: ${err}`);
-            });
+
+        this.processGlobalTreeNodes(magic, accessId);
     }
 
-    private currentSearchItems: Array<{ id: string; name: string; partNumber: string }>;
+    private currentInsertablesSearch: {
+        item: BTGlobalTreeMagicNodeInfo;
+        info: BTGlobalTreeNodeInfo;
+        offset: number;
+    };
+    private currentSearchItems: Array<SearchInfoNode | BTGlobalTreeNodeInfo>;
 
     public processSearch(searchInfo: BTGlobalTreeMagicNodeInfo, accessId: string) {
         //id is where to search under NOPE (not needed)
@@ -4010,8 +4157,11 @@ export class App extends BaseApp {
         //proxy folder will search the proxy library it is in NOPE (not needed yet?)
         let currentItem = this.currentBreadcrumbs[0];
         if (currentItem.jsonType === 'search') currentItem = this.currentBreadcrumbs[1];
-        const itemJsonType = currentItem.jsonType;
+        let itemJsonType = currentItem.jsonType;
+        if (itemJsonType === undefined) itemJsonType = currentItem.resourceType;
 
+        console.log('searchinfo: ', searchInfo);
+        console.log('current item', currentItem);
         searchInfo.description = searchInfo.description.toLowerCase();
 
         console.log('Searching', searchInfo, itemJsonType);
@@ -4029,30 +4179,17 @@ export class App extends BaseApp {
         const searchMatchReg =
             '(?:^|W)(' +
             searchRegExactArray.join('|') +
-            ')(?:$|W) | (' +
+            ')(?:$|W)|(' +
             searchRegNormalArray.join('|') +
             ')';
-
+        console.log(searchMatchReg);
+        this.currentInsertablesSearch = undefined;
         this.currentSearchItems = [];
-        if (itemJsonType === 'folder') {
-            // this.onshape.documentApi.getInsertables({
-            // })
-        } else if (itemJsonType === 'proxy-library') {
+        if (itemJsonType === 'proxy-library') {
             this.processProxyLibrarySearch(currentItem.id, searchMatchReg, accessId).then(
                 (content) => {
-                    if (content !== true) {
-                        this.ProcessNodeResults(
-                            {
-                                pathToRoot: this.currentBreadcrumbs,
-                                items: [
-                                    {
-                                        jsonType: 'no-content',
-                                        name: 'No parts matched your search.',
-                                    },
-                                ],
-                            },
-                            accessId
-                        );
+                    if (content === false) {
+                        this.processNoContent(accessId);
                     }
                 }
             );
@@ -4064,7 +4201,12 @@ export class App extends BaseApp {
             const promises: Promise<boolean>[] = [];
             for (let library of this.currentNodeInfo.items) {
                 promises.push(
-                    this.processProxyLibrarySearch(library.id, searchMatchReg, accessId)
+                    this.processProxyLibrarySearch(
+                        library.id,
+                        searchMatchReg,
+                        accessId,
+                        true
+                    )
                 );
             }
             Promise.all(promises).then((contentArray) => {
@@ -4073,18 +4215,28 @@ export class App extends BaseApp {
                     if (content === true) nocontent = false;
                 }
                 if (nocontent) {
-                    this.ProcessNodeResults(
-                        {
-                            pathToRoot: this.currentBreadcrumbs,
-                            items: [
-                                {
-                                    jsonType: 'no-content',
-                                    name: 'No parts matched your search.',
-                                },
-                            ],
-                        },
-                        accessId
-                    );
+                    this.processNoContent(accessId);
+                } else {
+                    this.getSearchItemByIndex(accessId, 0);
+                }
+            });
+        } else if (
+            itemJsonType === 'folder' ||
+            itemJsonType === 'magic' ||
+            itemJsonType === 'team-summary'
+        ) {
+            this.currentInsertablesSearch = {
+                item: currentItem,
+                info: searchInfo,
+                offset: 0,
+            };
+            this.processInsertablesSearch(
+                currentItem,
+                searchInfo.description,
+                accessId
+            ).then((content) => {
+                if (content === false) {
+                    this.processNoContent(accessId);
                 }
             });
         }
@@ -4103,6 +4255,18 @@ export class App extends BaseApp {
 
             const item = this.currentSearchItems[index];
             if (item === undefined || item === null) return resolve(false);
+            if ((item as BTGlobalTreeNodeInfo).jsonType == 'document-summary') {
+                const searchNodes: BTGlobalTreeNodesInfo = {
+                    pathToRoot,
+                    href: undefined,
+                    next: (index + 1).toString(),
+                    items: [item as BTGlobalTreeNodeInfo],
+                };
+
+                if (index === 0) this.addBreadcrumbNode(pathToRoot[0], true);
+                this.ProcessNodeResults(searchNodes, accessId);
+                resolve(true);
+            }
             this.onshape.documentApi.getDocument({ did: item.id }).then((res) => {
                 if (res === undefined) return resolve(false);
                 res.jsonType = 'document-summary';
@@ -4112,11 +4276,65 @@ export class App extends BaseApp {
                     next: (index + 1).toString(),
                     items: [res],
                 };
-                this.addBreadcrumbNode(pathToRoot[0]);
+                if (index === 0) this.addBreadcrumbNode(pathToRoot[0], true);
                 this.ProcessNodeResults(searchNodes, accessId);
                 resolve(true);
             });
         });
+    }
+
+    public processNoContent(accessId: string, description?: string) {
+        if (description === undefined) description = 'No parts matched your search.';
+        this.ProcessNodeResults(
+            {
+                pathToRoot: this.currentBreadcrumbs,
+                items: [
+                    {
+                        jsonType: 'no-content',
+                        name: description,
+                    },
+                ],
+            },
+            accessId
+        );
+    }
+
+    public processGlobalTreeNodes(magicId: string, accessId: string, offset?: number) {
+        if (offset == undefined || offset == null || offset < 0) offset = 0;
+        this.onshape.globalTreeNodesApi
+            .globalTreeNodesMagic({
+                mid: magicId,
+                getPathToRoot: true,
+                includeApplications: false,
+                includeAssemblies: true,
+                includeBlobs: false,
+                includeFSComputedPartPropertyFunctions: false,
+                includeFSTables: false,
+                includeFeatureStudios: false,
+                includeFeatures: false,
+                includeFlattenedBodies: true,
+                includePartStudios: magicId === '2',
+                includeParts: true,
+                includeReferenceFeatures: false,
+                includeSketches: true,
+                includeSurfaces: true,
+                includeVariableStudios: false,
+                includeVariables: false,
+                includeWires: false,
+                allowedApplicationMimeTypes: '',
+                allowedBlobExtensions: '',
+                allowedBlobMimeTypes: '',
+                limit: 30,
+                offset,
+            })
+            .then((res) => {
+                this.setBreadcrumbs(res.pathToRoot);
+                this.ProcessNodeResults(res, accessId);
+            })
+            .catch((err) => {
+                // Something went wrong, some mark us as no longer running.
+                console.log(`**** Call failed: ${err}`);
+            });
     }
 
     public processNextNodes(
@@ -4134,29 +4352,63 @@ export class App extends BaseApp {
                 break;
             }
             case 'magic': {
-                if (info.pathToRoot[0].id === 'RI') {
+                const id = info.pathToRoot[0].id;
+                if (id === 'RI') {
                     this.processRecentlyInsertedNode(
                         accessId,
                         info.pathToRoot,
                         parseInt(info.next)
                     );
-                } else if (info.pathToRoot[0].id === 'FV') {
+                } else if (id === 'FV') {
                     this.processFavoritedNode(
                         accessId,
                         info.pathToRoot,
                         parseInt(info.next)
                     );
-                } else if (info.pathToRoot[0].id === 'LI') {
+                } else if (id === 'LI') {
                     this.processLibrariesNode(
                         accessId,
                         info.pathToRoot,
                         parseInt(info.next)
                     );
+                } else if (id !== 'GL' && id !== 'HI' && id !== 'CD') {
+                    let next = 0;
+                    if (info.next !== undefined && info.next) {
+                        const matches = info.next.match(/offset=(\d+)/);
+                        if (
+                            matches !== undefined &&
+                            matches !== null &&
+                            matches.length > 1
+                        )
+                            next = parseInt(matches[1]);
+                    }
+                    this.processGlobalTreeNodes(id, accessId, next);
                 }
                 break;
             }
             case 'search': {
-                this.getSearchItemByIndex(accessId, parseInt(info.next));
+                // if (next !== 0) {
+                //     let currentItem = this.currentBreadcrumbs[0];
+                //     if (currentItem.jsonType === 'search')
+                //         currentItem = this.currentBreadcrumbs[1];
+                //     this.processInsertablesSearch(
+                //         currentItem,
+                //         searchInfo.description,
+                //         accessId
+                //     );
+                // }
+                if (this.currentInsertablesSearch !== undefined) {
+                    const search = this.currentInsertablesSearch;
+                    this.processInsertablesSearch(
+                        search.item,
+                        search.info.description,
+                        accessId
+                    ).then(() => {
+                        this.getSearchItemByIndex(accessId, parseInt(info.next));
+                    });
+                } else {
+                    this.getSearchItemByIndex(accessId, parseInt(info.next));
+                }
                 break;
             }
         }
@@ -4179,12 +4431,14 @@ export class App extends BaseApp {
         if (this.validAccessId(accessId) === false) return;
         // When it does, append all the elements to the UI
         if (
-            (info && info.items && info.items.length > 0,
+            info &&
+            info.items &&
+            info.items.length > 0 &&
             this.currentBreadcrumbs &&
-                !(
-                    this.currentBreadcrumbs.length > 1 &&
-                    this.currentBreadcrumbs[1].jsonType === 'search'
-                ))
+            !(
+                this.currentBreadcrumbs.length > 1 &&
+                this.currentBreadcrumbs[0].jsonType === 'search'
+            )
         )
             this.currentNodeInfo = info;
         this.appendElements(
@@ -4269,6 +4523,8 @@ export class App extends BaseApp {
 
         // Clean up the UI so we can populate it with new entries
         let dumpNodes = document.getElementById('dump');
+
+        // Create access ID to prevent unwanted content rendering
         let accessId = crypto.randomUUID();
         if (dumpNodes !== null) {
             dumpNodes.innerHTML = '';
