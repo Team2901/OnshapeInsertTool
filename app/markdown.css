@@ -345,6 +345,14 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
   list-style-type: lower-alpha;
 }
 
+.markdown-body ul>li {
+  list-style: disc;
+}
+
+.markdown-body ol>li {
+  list-style: decimal;
+}
+
 .markdown-body dd {
   margin-left: 0;
 }
