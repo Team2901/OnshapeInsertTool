@@ -446,6 +446,7 @@ export class App extends BaseApp {
                     id: 'dump',
                     class: 'y-overflow',
                 });
+                dumpNodes.oncontextmenu = (e) => e.preventDefault();
                 div.appendChild(dumpNodes);
 
                 this.setAppElements(div);
@@ -561,11 +562,11 @@ export class App extends BaseApp {
             );
         });
         if (itemInBreadcrumbs !== undefined) {
-            console.log(this.currentBreadcrumbs, itemInBreadcrumbsIndex);
+            // console.log(this.currentBreadcrumbs, itemInBreadcrumbsIndex);
             this.currentBreadcrumbs = this.currentBreadcrumbs.slice(
                 itemInBreadcrumbsIndex + 1
             );
-            console.log(this.currentBreadcrumbs);
+            // console.log(this.currentBreadcrumbs);
         }
         this.currentBreadcrumbs.unshift(node);
         this.setBreadcrumbs(this.currentBreadcrumbs, undefined, temporary);
@@ -1022,6 +1023,11 @@ export class App extends BaseApp {
         let container = this.getFileListContainer();
         // Iterate over all the items
         const containerBackground = this.getFileBackground();
+        containerBackground.onclick = (event) => {
+            //Maybe they are trying to click something behind background
+            containerBackground.remove();
+            event.preventDefault();
+        };
         containerBackground.oncontextmenu = (event) => {
             event.preventDefault();
             let rect = new DOMRect(
@@ -1050,7 +1056,7 @@ export class App extends BaseApp {
             ////
             const libraryName = this.libraries.decodeLibraryName(item.name);
             if (libraryName !== item.name) {
-                if (item.name.indexOf('︴raw') != -1) return;
+                if (item.name.indexOf('︴raw') !== -1) return;
                 item.jsonType = 'proxy-library'; //just make sure
                 item.isContainer = true; //also to make sure
                 item.name = libraryName; //so it renders correctly
@@ -1199,14 +1205,11 @@ export class App extends BaseApp {
             const dump = document.getElementById('dump');
             dump.append(container);
         }
-        const breadcrumbdiv = document.getElementById('breadcrumbs');
-        const searchbardiv = document.getElementById('search');
-        const breadcrumbHeight =
-            (breadcrumbdiv && breadcrumbdiv.clientHeight) +
-                (searchbardiv && searchbardiv.clientHeight) || 25;
-        container.style.top = breadcrumbdiv.offsetTop + breadcrumbHeight + 'px';
+
+        container.style.top = container.parentElement.offsetTop + 'px';
         return container;
     }
+
     /**
      * Finds the documents container to append entries to.  If one doesn't
      * already exist it will add it in the proper place.
@@ -1513,7 +1516,7 @@ export class App extends BaseApp {
                         optionElement.parentElement.style.display = 'none';
                         continue;
                     } else if (option.parentWithoutDocument[0] !== 'any') {
-                        console.log(option.parentWithoutDocument, parentNode);
+                        // console.log(option.parentWithoutDocument, parentNode);
                         //make sure the parent type is allowed
                         let correctPlacement = false;
                         option.parentWithoutDocument.forEach((allowedType) => {
@@ -1767,7 +1770,7 @@ export class App extends BaseApp {
                             inputDiv.style.display = 'flex';
                             submitElement.onclick = (e) => {
                                 e.preventDefault();
-                                if (inputProxyElement.value == '') {
+                                if (inputProxyElement.value === '') {
                                     //alert user that input must be filled
                                     return;
                                 }
@@ -2198,7 +2201,7 @@ export class App extends BaseApp {
                                     tfolders: number;
                                     status: string;
                                 }) => {
-                                    if (info.status == 'Copy files') {
+                                    if (info.status === 'Copy files') {
                                         infoTextElement.innerText = `
                                     🞄 ${info.pfolders}/${info.tfolders} folders processed
                               `; //${info.pfolders} folders proccessed of ${info.tfolders} discovered
@@ -2248,7 +2251,7 @@ export class App extends BaseApp {
                                     additions: number;
                                     status: string;
                                 }) => {
-                                    if (info.status == 'Scanning folders') {
+                                    if (info.status === 'Scanning folders') {
                                         infoTextElement.innerText = `
                                     🞄 ${info.folders} folders processed
                                     🞄 ${info.additions} additions found
@@ -2814,7 +2817,7 @@ export class App extends BaseApp {
                         // Nothing was insertable at all, so we just need to let them know that
                         if (this.targetDocumentElementInfo.elementType === 'PARTSTUDIO') {
                             this.getInsertChoices(item, 'ASSEMBLY').then((res) => {
-                                if (res.length != 0) {
+                                if (res.length !== 0) {
                                     alert(
                                         'This document only contains assembilies, so they cannot be inserted into the active partstudio'
                                     );
@@ -2940,6 +2943,7 @@ export class App extends BaseApp {
     ): Promise<void> {
         // Clean up the UI so we can populate it with the list
         let uiDiv = parentElement || document.getElementById('dump');
+        this.getFileBackground();
         if (uiDiv === null) {
             uiDiv = document.body;
         }
@@ -2986,6 +2990,7 @@ export class App extends BaseApp {
 
         const itemTreeDiv = createDocumentElement('div', {
             class: 'select-item-tree',
+            style: 'position:relative;z-index:1;',
         });
         const itemParentGroup = createDocumentElement('div', {
             class: 'select-item-parent-group',
@@ -3057,7 +3062,7 @@ export class App extends BaseApp {
             const childThumbnailDiv = createDocumentElement('div', {
                 class: 'select-item-dialog-thumbnail-container os-no-shrink',
             });
-            console.log('parent: ', parent, 'item: ', item, 'nodeInfo: ', nodeInfo);
+            // console.log('parent: ', parent, 'item: ', item, 'nodeInfo: ', nodeInfo);
             const thumbnailInfo = Object.assign({}, parent);
             thumbnailInfo['elementId'] = item.elementId;
             thumbnailInfo['elementType'] = item.elementType;
@@ -3842,9 +3847,6 @@ export class App extends BaseApp {
         Promise.all(documentRequests).then((documents: BTGlobalTreeNodeInfo[]) => {
             console.log(documents);
 
-            // if (res === undefined || res === null) {
-            //     return;
-            // }
             const recentNode: BTGlobalTreeNodesInfo = {
                 pathToRoot,
                 next: (index + 1).toString(),
@@ -3994,8 +3996,19 @@ export class App extends BaseApp {
         id: string,
         match: string,
         accessId: string,
-        skipRender?: boolean
+        skipRender?: boolean,
+        exactMatches?: string[],
+        exactSearch?: string
     ): Promise<boolean> {
+        let exactMatchReg = undefined;
+        if (
+            exactMatches !== undefined &&
+            exactMatches !== null &&
+            exactMatches.length > 0
+        ) {
+            exactMatchReg = new RegExp('(' + exactMatches.join('|') + ')', 'gmi');
+        }
+
         return new Promise((resolve, reject) => {
             this.libraries.getLibrarySearchInfo(id).then((res) => {
                 if (res === undefined) res = [];
@@ -4003,31 +4016,47 @@ export class App extends BaseApp {
 
                 console.log('Items: ', items);
 
-                const re = new RegExp(match);
+                const re = new RegExp(match, 'gmi');
                 this.currentSearchItems = (
                     this.currentSearchItems.concat(
-                        items.filter(
-                            (item) =>
+                        items.filter((item) => {
+                            if (exactMatchReg !== undefined) {
+                                const matches = item.name
+                                    .toLowerCase()
+                                    .match(exactMatchReg);
+                                if (
+                                    matches === null ||
+                                    (matches && exactMatches.length === 0)
+                                )
+                                    return false;
+                            }
+                            return (
                                 (
                                     item.name.toLowerCase() +
-                                    (item.partNumber + ' ' || '')
+                                    ' ' +
+                                    (item.partNumber || '') +
+                                    ' '
                                 ).match(re) !== null
-                        ) as Array<{ id: string; partNumber: string; name: string }>
+                            );
+                        }) as Array<{ id: string; partNumber: string; name: string }>
                     ) as SearchInfoNode[]
-                )
-                    .sort(
-                        (a, b) =>
-                            (a.name.toLowerCase().indexOf('configurable') > 0 ? 0 : 1) -
-                            (b.name.toLowerCase().indexOf('configurable') > 0 ? 0 : 1)
-                    )
-                    .sort(
-                        (a, b) =>
-                            (a.name.toLowerCase() + (a.partNumber + ' ' || '')).match(re)
-                                .length -
-                            (b.name.toLowerCase() + (b.partNumber + ' ' || '')).match(re)
-                                .length
+                ).sort((a, b) => {
+                    if (exactSearch !== undefined && exactSearch !== null) {
+                        const exact =
+                            (a.name.toLowerCase().indexOf(exactSearch) > 0 ? 0 : 1) -
+                            (b.name.toLowerCase().indexOf(exactSearch) > 0 ? 0 : 1);
+                        if (exact !== 0) return exact;
+                    }
+                    const config =
+                        (a.name.toLowerCase().indexOf('configurable') > 0 ? 0 : 1) -
+                        (b.name.toLowerCase().indexOf('configurable') > 0 ? 0 : 1);
+                    if (config !== 0) return config;
+                    return (
+                        (b.name + ' ' + (b.partNumber || '') + ' ').match(re).length -
+                        (a.name + ' ' + (a.partNumber || '') + ' ').match(re).length
                     );
-                // console.log(this.currentSearchItems);
+                });
+                
                 if (skipRender) return resolve(this.currentSearchItems.length > 0);
                 resolve(this.getSearchItemByIndex(accessId, 0));
             });
@@ -4154,17 +4183,13 @@ export class App extends BaseApp {
         //id is where to search under NOPE (not needed)
         //description is search input
         //resourceType is jsonType of item being searched NOPE (not needed yet?)
-        //proxy folder will search the proxy library it is in NOPE (not needed yet?)
         let currentItem = this.currentBreadcrumbs[0];
         if (currentItem.jsonType === 'search') currentItem = this.currentBreadcrumbs[1];
         let itemJsonType = currentItem.jsonType;
         if (itemJsonType === undefined) itemJsonType = currentItem.resourceType;
 
-        console.log('searchinfo: ', searchInfo);
-        console.log('current item', currentItem);
         searchInfo.description = searchInfo.description.toLowerCase();
 
-        console.log('Searching', searchInfo, itemJsonType);
         const searchRegExactArray = [];
         const searchRegNormalArray = [];
 
@@ -4172,27 +4197,29 @@ export class App extends BaseApp {
         const exactMatches = searchInfo.description.matchAll(exactMatchReg);
         for (const match of exactMatches) searchRegExactArray.push(match[1]);
         const resultingSearchString = searchInfo.description.replace(exactMatchReg, '');
-        const normalMatchReg = /(\w+)/gm;
+        const normalMatchReg = /([^ ]+)/gm;
         const normalMatches = resultingSearchString.matchAll(normalMatchReg);
         for (const match of normalMatches) searchRegNormalArray.push(match[1]);
 
-        const searchMatchReg =
-            '(?:^|W)(' +
-            searchRegExactArray.join('|') +
-            ')(?:$|W)|(' +
-            searchRegNormalArray.join('|') +
-            ')';
-        console.log(searchMatchReg);
+        let searchMatchReg = '';
+        if (searchRegExactArray.length !== 0)
+            searchMatchReg = '(?:^|\\W)(' + searchRegExactArray.join('|') + ')(?:$|\\W)|';
+        searchMatchReg += '(' + searchRegNormalArray.join('|') + ')';
         this.currentInsertablesSearch = undefined;
         this.currentSearchItems = [];
         if (itemJsonType === 'proxy-library') {
-            this.processProxyLibrarySearch(currentItem.id, searchMatchReg, accessId).then(
-                (content) => {
-                    if (content === false) {
-                        this.processNoContent(accessId);
-                    }
+            this.processProxyLibrarySearch(
+                currentItem.id,
+                searchMatchReg,
+                accessId,
+                false,
+                searchRegExactArray,
+                searchInfo.description
+            ).then((content) => {
+                if (content === false) {
+                    this.processNoContent(accessId);
                 }
-            );
+            });
         } else if (
             itemJsonType === 'magic' &&
             (currentItem.id === 'LI' || currentItem.id === 'GL')
@@ -4205,7 +4232,9 @@ export class App extends BaseApp {
                         library.id,
                         searchMatchReg,
                         accessId,
-                        true
+                        true,
+                        searchRegExactArray,
+                        searchInfo.description
                     )
                 );
             }
@@ -4255,7 +4284,7 @@ export class App extends BaseApp {
 
             const item = this.currentSearchItems[index];
             if (item === undefined || item === null) return resolve(false);
-            if ((item as BTGlobalTreeNodeInfo).jsonType == 'document-summary') {
+            if ((item as BTGlobalTreeNodeInfo).jsonType === 'document-summary') {
                 const searchNodes: BTGlobalTreeNodesInfo = {
                     pathToRoot,
                     href: undefined,
@@ -4300,7 +4329,7 @@ export class App extends BaseApp {
     }
 
     public processGlobalTreeNodes(magicId: string, accessId: string, offset?: number) {
-        if (offset == undefined || offset == null || offset < 0) offset = 0;
+        if (offset === undefined || offset === null || offset < 0) offset = 0;
         this.onshape.globalTreeNodesApi
             .globalTreeNodesMagic({
                 mid: magicId,
@@ -4492,19 +4521,23 @@ export class App extends BaseApp {
         const uiDiv = document.getElementById('dump');
         const container = createDocumentElement('div', { class: 'markdown-body' });
 
-        const html = marked.parse(content);
-        if (html instanceof Promise) {
-            html.then((res) => {
-                if (this.validAccessId(accessId) === false) return;
-                uiDiv.innerHTML = '';
-                container.innerHTML = res;
-                uiDiv.appendChild(container);
-            });
-        } else {
+        let parsed = marked.parse(content);
+
+        if (!(parsed instanceof Promise)) parsed = new Promise((res) => res(parsed));
+
+        parsed.then((html) => {
+            if (this.validAccessId(accessId) === false) return;
             uiDiv.innerHTML = '';
             container.innerHTML = html;
+
+            Array.from(container.getElementsByTagName('a')).forEach((link) => {
+                link.target = '_blank';
+                link.rel = 'noreferrer noopener';
+                link.onclick = () => window.open(link.href);
+            });
+
             uiDiv.appendChild(container);
-        }
+        });
     }
 
     /**
@@ -4513,8 +4546,6 @@ export class App extends BaseApp {
      * @param teamroot Preserved team root so that we know when we are processing a folder under a team
      */
     public gotoFolder(item: BTGlobalTreeNodeInfo, teamroot?: BTGlobalTreeNodeInfo): void {
-        console.log(item);
-
         this.hidePopup();
         this.hideActionMenu();
 
@@ -4534,6 +4565,7 @@ export class App extends BaseApp {
             dumpNodes = document.body;
         }
         const container = this.getFileListContainer();
+        container.innerHTML = '';
         dumpNodes.appendChild(container);
         if (item.jsonType === 'team-summary') {
             this.onshape.globalTreeNodesApi
@@ -4562,13 +4594,10 @@ export class App extends BaseApp {
                     console.log(`**** Call failed: ${err}`);
                 });
         } else if (item.jsonType === 'proxy-library') {
-            console.log('Going to a proxy library');
-            console.log(item);
             this.libraries
                 .getProxyLibrary(undefined, item.id)
                 .then((res) => {
                     this.addBreadcrumbNode(item);
-                    // this.setBreadcrumbs(this.currentBreadcrumbs, teamroot);
                     this.ProcessNodeResults(
                         {
                             items: res.contents,
@@ -4587,14 +4616,12 @@ export class App extends BaseApp {
                     }
                 });
         } else if (item.jsonType === 'proxy-folder') {
-            console.log('Going to a proxy folder');
             this.libraries.getProxyLibrary(undefined, item.projectId).then((res) => {
                 if (res !== undefined) {
                     const { library } = res;
                     this.addBreadcrumbNode(item);
                     //use breadcrumbs for library
                     this.libraries.getProxyFolder(library, item.id).then((res) => {
-                        // this.setBreadcrumbs(this.currentBreadcrumbs, teamroot);
                         this.ProcessNodeResults(
                             {
                                 items: res,
