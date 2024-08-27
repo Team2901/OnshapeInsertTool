@@ -4056,7 +4056,7 @@ export class App extends BaseApp {
                         (a.name + ' ' + (a.partNumber || '') + ' ').match(re).length
                     );
                 });
-                
+
                 if (skipRender) return resolve(this.currentSearchItems.length > 0);
                 resolve(this.getSearchItemByIndex(accessId, 0));
             });
@@ -4178,13 +4178,18 @@ export class App extends BaseApp {
         offset: number;
     };
     private currentSearchItems: Array<SearchInfoNode | BTGlobalTreeNodeInfo>;
+    private lastSearchLibraries: Array<BTGlobalTreeNodeInfo>;
 
     public processSearch(searchInfo: BTGlobalTreeMagicNodeInfo, accessId: string) {
         //id is where to search under NOPE (not needed)
         //description is search input
         //resourceType is jsonType of item being searched NOPE (not needed yet?)
         let currentItem = this.currentBreadcrumbs[0];
-        if (currentItem.jsonType === 'search') currentItem = this.currentBreadcrumbs[1];
+        let reSearching = false;
+        if (currentItem.jsonType === 'search') {
+            currentItem = this.currentBreadcrumbs[1];
+            reSearching = true;
+        }
         let itemJsonType = currentItem.jsonType;
         if (itemJsonType === undefined) itemJsonType = currentItem.resourceType;
 
@@ -4226,7 +4231,11 @@ export class App extends BaseApp {
         ) {
             //currentNodes are all libraries
             const promises: Promise<boolean>[] = [];
-            for (let library of this.currentNodeInfo.items) {
+            let libraries = this.currentNodeInfo.items;
+            if (libraries != undefined && reSearching)
+                libraries = this.lastSearchLibraries;
+            this.lastSearchLibraries = libraries;
+            for (let library of libraries) {
                 promises.push(
                     this.processProxyLibrarySearch(
                         library.id,
@@ -4244,7 +4253,7 @@ export class App extends BaseApp {
                     if (content === true) nocontent = false;
                 }
                 if (nocontent) {
-                    this.processNoContent(accessId);
+                    this.processNoSearchMatches(accessId);
                 } else {
                     this.getSearchItemByIndex(accessId, 0);
                 }
@@ -4265,7 +4274,7 @@ export class App extends BaseApp {
                 accessId
             ).then((content) => {
                 if (content === false) {
-                    this.processNoContent(accessId);
+                    this.processNoSearchMatches(accessId);
                 }
             });
         }
@@ -4310,6 +4319,19 @@ export class App extends BaseApp {
                 resolve(true);
             });
         });
+    }
+
+    public processNoSearchMatches(accessId: string) {
+        this.addBreadcrumbNode(
+            {
+                jsonType: 'search',
+                id: 'SR',
+                name: 'Search Results',
+                resourceType: 'search',
+            },
+            true
+        );
+        this.processNoContent(accessId);
     }
 
     public processNoContent(accessId: string, description?: string) {
