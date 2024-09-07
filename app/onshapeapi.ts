@@ -434,7 +434,7 @@ export class OnshapeAPI {
             retry = false,
             retryInterval = 2,
             id = undefined,
-            thumbnailId = undefined
+            thumbnailId = undefined,
         } = options || {};
         // // Override any defaults
         // if (options !== undefined) {
@@ -474,7 +474,11 @@ export class OnshapeAPI {
         }
         imageURL += `/s/${width}x${height}`;
 
-        if (item.thumbnail !== undefined && item.thumbnail !== null && item['elementType'] !== 'PARTSTUDIO') {
+        if (
+            item.thumbnail !== undefined &&
+            item.thumbnail !== null &&
+            item['elementType'] !== 'PARTSTUDIO'
+        ) {
             // We have a potential thumbnail URI we can work from
             // See if we can find a URI that matches
             for (let thumbnailInfo of item.thumbnail.sizes) {
@@ -499,6 +503,7 @@ export class OnshapeAPI {
             height: String(height),
             id: id,
         }) as HTMLImageElement;
+
 
         this.getThumbnail(imageURL)
             .then((src) => {

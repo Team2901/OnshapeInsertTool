@@ -26,12 +26,14 @@ const config = {
     // use sftp or ftp
     sftp: false,
 };
+
 if(process.argv.length === 3 && process.argv.at(2) === "mainonly"){
-  config.deleteRemote = false;
-  config.exclude = config.exclude.concat['*.php', 'dist/*','.htaccess'];
+  console.log("mainonly");
+  // config.deleteRemote = false;
+  // config.exclude = config.exclude.concat['*.php', 'dist/*','.htaccess'];
 }
 
 ftpDeploy
     .deploy(config)
-    .then((res) => console.log('finished:', res))
+    .then((res) => console.log('finished:', res, "\n Time" + new Date().toString()))
     .catch((err) => console.log(err));
