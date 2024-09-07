@@ -75,7 +75,7 @@ import {
 import { Library } from './libraries';
 import { appName as APP_NAME } from './app_settings.json';
 import { InformationReporter } from './InformationReporter';
-import { marked } from 'marked';
+import { defaults, marked } from 'marked';
 
 export interface magicIconInfo {
     label: string;
@@ -131,6 +131,7 @@ export interface actionMenuOptionInfo {
     deleteIcon?: boolean; //
     parentWithoutDocument?: string[]; // rendered if no document is selected and parent json type is one of these
     userOwned?: boolean; //document is owned by this user
+    // multiSelect?: boolean; //options available for multiple documents selected
 }
 
 export interface actionMenuOptionInputInfo {
@@ -154,7 +155,7 @@ export class App extends BaseApp {
         item: BTInsertableInfo,
         insertInfo: configInsertInfo,
         nodeInfo: BTGlobalTreeNodeInfo
-    ) => void = this.insertToOther;
+    ) => Promise<void> = this.insertToOther;
 
     private globalLibrariesNodes: string[] = [
         'f3b99a8450b4f983b1efa03c', //Pitsco
@@ -395,6 +396,13 @@ export class App extends BaseApp {
             name: 'scanproxylibrarydelta',
             label: 'Scan library for changes',
         },
+        INSERTALL: {
+            parentType: ['any'],
+            documentType: ['document-summaries'],
+            name: 'insertalldocuments',
+            label: 'Insert Selected Documents',
+            // multiSelect: true,
+        },
     };
     public preferences: Preferences;
     public libraries: Library;
@@ -424,6 +432,7 @@ export class App extends BaseApp {
                 var div = createDocumentElement('div', { id: 'apptop' });
                 this.createPopupDialog(div);
                 this.createActionMenu(div);
+                this.createBoxSelect(div);
 
                 //Create search div
                 var searchdiv = createDocumentElement('div', {
@@ -514,7 +523,6 @@ export class App extends BaseApp {
      * @param location Location to
      */
     public saveLastLocation(location: folderLocation): void {
-        // console.log(location, '______');
         this.preferences.setLastKnownLocation(location.pathToRoot);
     }
     /**
@@ -562,11 +570,9 @@ export class App extends BaseApp {
             );
         });
         if (itemInBreadcrumbs !== undefined) {
-            // console.log(this.currentBreadcrumbs, itemInBreadcrumbsIndex);
             this.currentBreadcrumbs = this.currentBreadcrumbs.slice(
                 itemInBreadcrumbsIndex + 1
             );
-            // console.log(this.currentBreadcrumbs);
         }
         this.currentBreadcrumbs.unshift(node);
         this.setBreadcrumbs(this.currentBreadcrumbs, undefined, temporary);
@@ -582,7 +588,6 @@ export class App extends BaseApp {
         teamroot?: BTGlobalTreeNodeInfo,
         temporary: boolean = false
     ): void {
-        // console.log(breadcrumbs);
         if (temporary !== true)
             this.saveLastLocation({
                 pathToRoot: breadcrumbs,
@@ -863,6 +868,7 @@ export class App extends BaseApp {
         });
         const searchBoxInput = createDocumentElement('input', {
             type: 'text',
+            id: 'searchboxinput',
             class: 'os-search-box-input os-grow ng-pristine ng-valid ng-empty ng-touched',
             placeholder: 'Search by name or part number',
             style: 'font-size: 12px',
@@ -931,7 +937,6 @@ export class App extends BaseApp {
     }
 
     private checkSearchBarEnabled(newFolder: BTGlobalTreeNodeInfo): void {
-        // console.log(newFolder);
         switch (newFolder.jsonType || newFolder.resourceType) {
             case 'home': {
                 this.hideSearchBar();
@@ -1007,6 +1012,8 @@ export class App extends BaseApp {
         this.setBreadcrumbs([]);
     }
 
+    private loadedElements: BTGlobalTreeMagicNodeInfo[];
+
     /**
      * Append a dump of elements to the current UI
      * @param items Items to append
@@ -1021,12 +1028,28 @@ export class App extends BaseApp {
     ): void {
         // Figure out where we are to add the entries
         let container = this.getFileListContainer();
+        const dumpDiv = container.parentElement;
+        dumpDiv.onmousedown = (event) => {
+            if (event.button !== 0) return;
+            this.boxSelectStart(event.clientX, event.clientY);
+        };
+        dumpDiv.onmousemove = (event) => {
+            if (event.button !== 0) return;
+            if (this.boxSelectUpdate(event.clientX, event.clientY)) {
+                event.preventDefault();
+            }
+        };
+        dumpDiv.onmouseup = (event) => {
+            if (event.button !== 0) return;
+            if (this.boxSelectEnd(dumpDiv.offsetTop - dumpDiv.scrollTop))
+                event.preventDefault();
+        };
         // Iterate over all the items
         const containerBackground = this.getFileBackground();
         containerBackground.onclick = (event) => {
-            //Maybe they are trying to click something behind background
             containerBackground.remove();
             event.preventDefault();
+            //Maybe they are trying to click something behind background
         };
         containerBackground.oncontextmenu = (event) => {
             event.preventDefault();
@@ -1039,8 +1062,10 @@ export class App extends BaseApp {
             this.showActionMenu(undefined, parentNode, rect);
             this.hidePopup();
         };
+
+        if (this.loaded == 0) this.loadedElements = [];
+
         items.map((item) => {
-            // console.log('appending elements: item', item);
             const itemInfo = item as BTDocumentSummaryInfo;
             // Have we hit the limit?  If so then just skip out
             if (this.loaded >= this.loadedlimit) {
@@ -1048,6 +1073,7 @@ export class App extends BaseApp {
             }
             // Count another entry output
             this.loaded++;
+            this.loadedElements.push(item);
             ///
             // <table class="os-documents-list os-items-table full-width"><tbody>
             // <tr class="os-item-row os-document-in-list">
@@ -1063,7 +1089,11 @@ export class App extends BaseApp {
             }
 
             const lastLoaded = this.loaded;
-            const rowContainer = createDocumentElement('div');
+            const rowContainer = createDocumentElement('div', {
+                style: 'user-select:none',
+            });
+            rowContainer['document-id'] = item.id;
+            rowContainer['jsonType'] = item.jsonType;
 
             let rowelem = createDocumentElement('div', {
                 class: 'document-version-item-row select-item-dialog-item-row os-selectable-item',
@@ -1436,7 +1466,7 @@ export class App extends BaseApp {
         rect: DOMRect
     ): void {
         const actionMenu = document.getElementById('docactionmenu');
-        if (actionMenu !== null) {
+        if (actionMenu != undefined) {
             // TODO: Same as popup, Move actionMenu above item if it doesn't fit below
             const actionMenuWidth = Math.max(300, rect.width);
             actionMenu.style.left = String(rect.left) + 'px';
@@ -1447,16 +1477,7 @@ export class App extends BaseApp {
 
             //Move actionMenu into view
             actionMenu.style.display = 'block';
-            const actionMenuRect = actionMenuDiv.getBoundingClientRect();
-            if (actionMenuRect.left < 0) actionMenu.style.left = '0px';
-            if (actionMenuRect.right > document.body.clientWidth)
-                actionMenu.style.left =
-                    String(document.body.clientWidth - actionMenuDiv.clientWidth - 2) +
-                    'px';
-            if (actionMenuRect.top < 0) actionMenu.style.top = '0px';
-            if (actionMenuRect.bottom > document.body.clientHeight)
-                actionMenu.style.top =
-                    String(document.body.clientHeight - actionMenuRect.height - 2) + 'px';
+            this.updateActionMenuTransforms();
             actionMenu.style.display = 'none';
             //Prune seperators
             actionMenuDiv.childNodes.forEach((elem) => {
@@ -1469,6 +1490,7 @@ export class App extends BaseApp {
             });
 
             const backgroundMenu = item === undefined || item === null;
+            const multiSelect = item != null && item.jsonType === 'document-summaries';
 
             let availableOptions = 0;
 
@@ -1490,6 +1512,9 @@ export class App extends BaseApp {
 
                 if (option.input !== undefined) {
                     inputDiv = document.getElementById(optionId + '_inputdiv');
+                    new ResizeObserver(() => this.updateActionMenuTransforms()).observe(
+                        inputDiv
+                    );
                     submitElement = document.getElementById(
                         optionId + '_submit'
                     ) as HTMLButtonElement;
@@ -1498,12 +1523,19 @@ export class App extends BaseApp {
                 //makes sure user ownership status is right
                 if (option.userOwned) {
                     if (
-                        ((item.owner && item.owner.id) !== this.onshape.userId &&
-                            item.createdBy &&
-                            item.createdBy.id !== this.onshape.userId) ||
-                        (proxyLibrary &&
-                            proxyLibrary.owner &&
-                            proxyLibrary.owner.id !== this.onshape.userId)
+                        // ((item.owner && item.owner.id) !== this.onshape.userId &&
+                        //     item.createdBy &&
+                        //     item.createdBy.id !== this.onshape.userId) ||
+                        proxyLibrary &&
+                        proxyLibrary.owner &&
+                        proxyLibrary.owner.id !== this.onshape.userId &&
+                        !(
+                            proxyLibrary &&
+                            proxyLibrary['permissionSet'] &&
+                            (proxyLibrary['permissionSet'] as Array<String>).indexOf(
+                                'WRITE'
+                            ) != -1
+                        )
                     ) {
                         optionElement.parentElement.style.display = 'none';
                         continue;
@@ -1516,7 +1548,6 @@ export class App extends BaseApp {
                         optionElement.parentElement.style.display = 'none';
                         continue;
                     } else if (option.parentWithoutDocument[0] !== 'any') {
-                        // console.log(option.parentWithoutDocument, parentNode);
                         //make sure the parent type is allowed
                         let correctPlacement = false;
                         option.parentWithoutDocument.forEach((allowedType) => {
@@ -1531,6 +1562,7 @@ export class App extends BaseApp {
                             continue;
                         }
                     }
+                    // } else if (multiSelect) {
                 } else {
                     //item doesn't exist so we don't need to do these checks
 
@@ -1920,11 +1952,9 @@ export class App extends BaseApp {
                                 });
                             inputLibElement.onchange = () => {
                                 const libraryId = inputLibElement.value;
-                                // console.log(libraryId);
                                 this.libraries
                                     .getProxyLibrary(undefined, libraryId, true)
                                     .then((library) => {
-                                        // console.log(library);
                                         const descendants = library.descendants;
                                         if (!descendants) return;
                                         const folderOptions: Array<{
@@ -2072,11 +2102,9 @@ export class App extends BaseApp {
                             inputLibElement.onchange = () => {
                                 selectedLibrary = undefined;
                                 const libraryId = inputLibElement.value;
-                                // console.log(libraryId);
                                 this.libraries
                                     .getProxyLibrary(undefined, libraryId, true)
                                     .then((library) => {
-                                        // console.log(library);
                                         selectedLibrary = library.library;
                                         const descendants = library.descendants;
                                         if (!descendants) return;
@@ -2291,6 +2319,33 @@ export class App extends BaseApp {
                         };
                         break;
                     }
+                    case 'INSERTALL': {
+                        optionElement.onclick = () => {
+                            this.setInProgress();
+                            this.lockInProgress();
+                            const promises: Promise<void>[] = [];
+                            this.selectedItems.forEach((item) => {
+                                promises.push(
+                                    // new Promise((resolve) => {
+                                    this.quickInsertItem(item as BTDocumentSummaryInfo) //;
+                                    // })
+                                );
+                            });
+                            setTimeout(() => {
+                                //in case of failed insertions that cannot be caught
+                                if (!this.inProgressLocked) return;
+                                this.lockInProgress(false);
+                                this.setInProgress(false);
+                                this.hideActionMenu();
+                            }, 6000);
+                            Promise.all(promises).then(() => {
+                                this.lockInProgress(false);
+                                this.setInProgress(false);
+                                this.hideActionMenu();
+                            });
+                        };
+                        break;
+                    }
                 }
 
                 if (id !== 'NAME') {
@@ -2326,6 +2381,24 @@ export class App extends BaseApp {
             actionMenu.style.display = 'block';
         }
     }
+
+    public updateActionMenuTransforms(): void {
+        const actionMenu = document.getElementById('docactionmenu');
+        if (actionMenu == undefined) return;
+        const actionMenuDiv = actionMenu.firstChild as HTMLDivElement;
+        if (actionMenuDiv == undefined) return;
+
+        const actionMenuRect = actionMenuDiv.getBoundingClientRect();
+        if (actionMenuRect.left < 0) actionMenu.style.left = '0px';
+        if (actionMenuRect.right > document.body.clientWidth)
+            actionMenu.style.left =
+                String(document.body.clientWidth - actionMenuDiv.clientWidth - 2) + 'px';
+        if (actionMenuRect.top < 0) actionMenu.style.top = '0px';
+        if (actionMenuRect.bottom > document.body.clientHeight)
+            actionMenu.style.top =
+                String(document.body.clientHeight - actionMenuRect.height - 2) + 'px';
+    }
+
     public updateActionMenuInputOptions(
         id: string,
         list: Array<{ id: string; label: string }>
@@ -2351,6 +2424,7 @@ export class App extends BaseApp {
             actionMenu.style.display = 'none';
         }
         this.hideActionMenuOptionInputs();
+        this.unselectItems();
     }
     public hideActionMenuOptionInputs(): void {
         const actionMenu = document.getElementById('docactionmenu');
@@ -2502,7 +2576,173 @@ export class App extends BaseApp {
         this.hideActionMenu();
     }
 
-    public renderActionMenuOptions(options: actionMenuOptionInfo[]) {}
+    // public renderActionMenuOptions(options: actionMenuOptionInfo[]) {}
+
+    private selectedItems: BTGlobalTreeNodeInfo[] = [];
+    private boxSelectActive: boolean = false;
+
+    private setElementsUserSelect(selectable: boolean): void {
+        const elementContainer = document.getElementById('glist');
+        if (elementContainer == undefined) return;
+        Array.from(elementContainer.children).forEach((child) => {
+            if (selectable === true) {
+                child.firstElementChild.classList.add('os-selectable-item');
+            } else {
+                child.firstElementChild.classList.remove('os-selectable-item');
+            }
+        });
+    }
+
+    private unselectItems(): void {
+        this.selectedItems = [];
+
+        const elementContainer = document.getElementById('glist');
+        if (elementContainer == undefined) return;
+        Array.from(elementContainer.children).forEach((child) => {
+            (child.firstElementChild as HTMLDivElement).style.backgroundColor = '';
+        });
+    }
+
+    private boxSelectStart(x: number, y: number) {
+        const boxSelect = document.getElementById('boxselect');
+        if (boxSelect == undefined) return;
+        if (
+            this.currentBreadcrumbs &&
+            (this.currentBreadcrumbs.length === 0 ||
+                (this.currentBreadcrumbs[0] &&
+                    this.currentBreadcrumbs.length > 0 &&
+                    this.currentBreadcrumbs[0].jsonType === 'home'))
+        )
+            return;
+
+        const elementContainer = document.getElementById('glist');
+        if (elementContainer == undefined) {
+            boxSelect.style.display = 'none';
+            return;
+        }
+
+        this.unselectItems();
+        this.setElementsUserSelect(false);
+
+        boxSelect['start-x'] = x;
+        boxSelect['start-y'] = y;
+
+        boxSelect.style.width = '0px';
+        boxSelect.style.height = '0px';
+
+        boxSelect.style.left = x + 'px';
+        boxSelect.style.top = y + 'px';
+
+        boxSelect.style.display = 'block';
+        this.boxSelectActive = true;
+    }
+
+    private boxSelectUpdate(x: number, y: number): boolean {
+        const boxSelect = document.getElementById('boxselect');
+        if (boxSelect == undefined) return;
+        if (boxSelect.style.display === 'none') return;
+
+        const sx = boxSelect['start-x'],
+            sy = boxSelect['start-y'];
+
+        if (x > sx) {
+            boxSelect.style.left = sx + 'px';
+            boxSelect.style.width = x - sx + 'px';
+        } else {
+            boxSelect.style.left = x + 'px';
+            boxSelect.style.width = sx - x + 'px';
+        }
+        if (y > sy) {
+            boxSelect.style.top = sy + 'px';
+            boxSelect.style.height = y - sy + 'px';
+        } else {
+            boxSelect.style.top = y + 'px';
+            boxSelect.style.height = sy - y + 'px';
+        }
+
+        return true;
+    }
+
+    private boxSelectEnd(topOffset: number): boolean {
+        this.setElementsUserSelect(true);
+
+        const boxSelect = document.getElementById('boxselect');
+        if (boxSelect == undefined) return;
+        if (boxSelect.style.display === 'none') return;
+
+        const width = boxSelect.offsetWidth;
+        const height = boxSelect.offsetHeight;
+
+        const elementContainer = document.getElementById('glist');
+        if (elementContainer == undefined || width * height < 10) {
+            boxSelect.style.display = 'none';
+            return;
+        }
+
+        let upperB = boxSelect.offsetTop - topOffset;
+        let lowerB = upperB + height;
+        let leftB = boxSelect.offsetLeft;
+        let rightB = leftB + width;
+
+        this.selectedItems = [];
+        const inRange: string[] = [];
+        Array.from(elementContainer.children).forEach((child: HTMLDivElement) => {
+            const top = child.offsetTop;
+            const left = child.offsetLeft;
+
+            if (
+                top + child.offsetHeight < upperB ||
+                left + child.offsetWidth < leftB ||
+                top > lowerB ||
+                left > rightB
+            )
+                return;
+
+            const did = child['document-id'];
+            const jsonType = child['jsonType'];
+            if (did == undefined || jsonType == undefined) return;
+            if (jsonType !== 'document-summary') return;
+
+            (child.firstElementChild as HTMLDivElement).style.backgroundColor =
+                'var(--os-hover-primary)';
+
+            inRange.push(did);
+        });
+
+        this.loadedElements.forEach((elem) => {
+            if (inRange.indexOf(elem.id) != -1) this.selectedItems.push(elem);
+        });
+
+        const rect = boxSelect.getBoundingClientRect();
+
+        boxSelect.style.display = 'none';
+
+        if (this.selectedItems.length > 0)
+            this.showActionMenu(
+                { jsonType: 'document-summaries' },
+                this.currentBreadcrumbs[0],
+                rect
+            );
+
+        return true;
+    }
+
+    private hideBoxSelect(): void {
+        const boxSelect = document.getElementById('boxselect');
+        if (boxSelect == undefined) return;
+        boxSelect.style.display === 'none';
+        this.unselectItems();
+    }
+
+    private createBoxSelect(parent: HTMLElement) {
+        const boxSelect = createDocumentElement('div', {
+            id: 'boxselect',
+            class: 'popover popup bs-popover-bottom',
+            style: 'border:none;display:none;background-color:rgba(178, 221, 246, 0.7);border: solid rgba(44, 165, 242 ,0.9) 1px;pointer-events:none;',
+        });
+        parent.appendChild(boxSelect);
+    }
+
     /**
      * Get the elements in a document
      * @param documentId Document ID
@@ -2510,44 +2750,6 @@ export class App extends BaseApp {
      * @param elementId Specific element ID
      * @returns Array of BTDocumentElementInfo
      */
-
-    // public showChangeMenu(library: BTGlobalTreeNodeInfo) {
-    //     this.libraries.scanLibraryDelta(library);
-    // }
-
-    public createChangeMenu(parent: HTMLElement): void {
-        const changeMenuMainDiv = createDocumentElement('div', {
-            id: 'docchangemenu',
-            class: 'popover popup bs-popover-bottom',
-            style: 'border:none;display:none;',
-        });
-        let changeMenuDiv = createDocumentElement('div', {
-            class: 'context-menu-list contextmenu-list list-has-icons context-menu-root',
-        });
-
-        const closeChangeMenu = createDocumentElement('li', {
-            id: 'docactionmenu_close',
-            class: 'context-menu-item',
-            style: 'position:absolute;right:0px;top:0px;padding-right:3px;z-index:1;',
-            textContent: '🞬',
-        });
-        closeChangeMenu.onclick = () => {
-            this.hideActionMenu();
-        };
-        changeMenuDiv.appendChild(closeChangeMenu);
-
-        const noOptionsList = createDocumentElement('li', {
-            id: 'docactionmenu_no-options',
-            class: 'context-menu-item',
-            textContent: 'No available options  ',
-        });
-        changeMenuDiv.appendChild(noOptionsList);
-
-        changeMenuMainDiv.appendChild(changeMenuDiv);
-
-        parent.appendChild(changeMenuMainDiv);
-        this.hideActionMenu();
-    }
 
     public getDocumentElementInfo(
         documentId: string,
@@ -2661,7 +2863,7 @@ export class App extends BaseApp {
             let insertables = await this.onshape.documentApi.getInsertables(parameters);
             const result: BTInsertableInfo[] = [];
             let donotuseelement: BTInsertableInfo = undefined;
-            const insertMap = new Map<string, BTInsertableInfo>();
+            const insertMap: { [key: string]: BTInsertableInfo } = {};
             const dropParents = new Map<string, Boolean>();
             while (insertables !== undefined && insertables.items.length > 0) {
                 for (let element of insertables.items) {
@@ -2685,13 +2887,21 @@ export class App extends BaseApp {
                             donotuseelement = element;
                         }
                         if (
-                            element.parentId !== undefined &&
-                            element.parentId !== null &&
-                            (elementPartName.indexOf('DO NOT USE THESE PARTS') >= 0 ||
-                                elementPartName.indexOf('PARTS DO NOT USE') >= 0 ||
-                                elementPartName.indexOf('DO NOT USE PARTS') >= 0)
+                            elementPartName.indexOf('DO NOT USE THESE PARTS') >= 0 ||
+                            elementPartName.indexOf('PARTS DO NOT USE') >= 0 ||
+                            elementPartName.indexOf('DO NOT USE PARTS') >= 0 ||
+                            elementName.indexOf('DO NOT USE THESE PARTS') >= 0 ||
+                            elementName.indexOf('PARTS DO NOT USE') >= 0 ||
+                            elementName.indexOf('DO NOT USE PARTS') >= 0
                         ) {
-                            dropParents[element.parentId] = true;
+                            if (
+                                element.parentId !== undefined &&
+                                element.parentId !== null
+                            ) {
+                                dropParents[element.parentId] = true;
+                            } else {
+                                delete insertMap[element.id];
+                            }
                         }
                     }
                 }
@@ -2803,33 +3013,130 @@ export class App extends BaseApp {
      * Check if an item can be inserted or if we have to prompt the user for more choices.
      * @param item Item to check
      */
+    public quickInsertItem(itemRaw: BTDocumentSummaryInfo): Promise<void> {
+        return new Promise((resolve, reject) => {
+            this.resolveDocumentVersion(itemRaw).then((item) => {
+                this.getInsertChoices(
+                    item,
+                    this.targetDocumentElementInfo.elementType
+                ).then((res) => {
+                    let itemToInsert = res[0];
+
+                    if (res.length === 0) return resolve();
+
+                    if (
+                        res.length > 1 ||
+                        itemToInsert.configurationParameters != null ||
+                        itemToInsert.configurationParameterValues != null
+                    ) {
+                        //pick composite part to insert (if there is one)
+                        res.forEach((elem) => {
+                            if (elem.bodyType === 'COMPOSITE') {
+                                itemToInsert = elem;
+                                return;
+                            }
+                        });
+                        this.findDeterministicPartId(itemToInsert)
+                            .then(() => {
+                                this.getMetaData(itemToInsert, '')
+                                    .then(() => {
+                                        this.insertToTarget(
+                                            this.documentId,
+                                            this.workspaceId,
+                                            this.elementId,
+                                            itemToInsert,
+                                            undefined,
+                                            itemRaw
+                                        ).then(() => resolve());
+                                    })
+                                    .catch((err) => {
+                                        this.insertToTarget(
+                                            this.documentId,
+                                            this.workspaceId,
+                                            this.elementId,
+                                            itemToInsert,
+                                            undefined,
+                                            itemRaw
+                                        ).then(() => resolve());
+                                    });
+                            })
+                            .catch((err) => {
+                                this.insertToTarget(
+                                    this.documentId,
+                                    this.workspaceId,
+                                    this.elementId,
+                                    itemToInsert,
+                                    undefined,
+                                    itemRaw
+                                ).then(() => resolve());
+                            });
+                    } else {
+                        this.insertToTarget(
+                            this.documentId,
+                            this.workspaceId,
+                            this.elementId,
+                            itemToInsert,
+                            undefined,
+                            itemRaw
+                        ).then(() => resolve());
+                    }
+                    // Perform an actual insert of an item. Note that we already know if we are
+                    // going into a part studio or an assembly.
+                    // const simpleItem = Object.assign({}, itemToInsert);
+                    // const insertSimple = () => {
+                    //     this.insertToTarget(
+                    //         this.documentId,
+                    //         this.workspaceId,
+                    //         this.elementId,
+                    //         simpleItem,
+                    //         undefined,
+                    //         itemRaw
+                    //     ).then(() => resolve());
+                    // };
+                });
+            });
+        });
+    }
+    /**
+     * Check if an item can be inserted or if we have to prompt the user for more choices.
+     * @param item Item to check
+     */
     public checkInsertItem(
         itemRaw: BTDocumentSummaryInfo,
         renderIndex: number,
         parentElement: HTMLElement,
         clearParentElement: boolean,
-        accessId: string
-    ): void {
-        this.resolveDocumentVersion(itemRaw).then((item) => {
-            this.getInsertChoices(item, this.targetDocumentElementInfo.elementType).then(
-                (res) => {
+        accessId: string,
+        simpleInsert?: boolean
+    ): Promise<void> {
+        return new Promise((resolve, reject) => {
+            this.resolveDocumentVersion(itemRaw).then((item) => {
+                this.getInsertChoices(
+                    item,
+                    this.targetDocumentElementInfo.elementType
+                ).then((res) => {
                     if (res.length === 0) {
                         // Nothing was insertable at all, so we just need to let them know that
                         if (this.targetDocumentElementInfo.elementType === 'PARTSTUDIO') {
                             this.getInsertChoices(item, 'ASSEMBLY').then((res) => {
                                 if (res.length !== 0) {
                                     alert(
-                                        'This document only contains assembilies, so they cannot be inserted into the active partstudio'
+                                        `Document: ${item.name} (${item.id}) only contains assembilies, so they cannot be inserted into the active partstudio`
                                     );
                                 } else {
-                                    alert('Nothing is insertable from this document');
+                                    alert(
+                                        `Nothing is insertable from document: ${item.name} (${item.id})`
+                                    );
                                 }
                             });
                         } else {
-                            alert('Nothing is insertable from this document');
+                            alert(
+                                `Nothing is insertable from document: ${item.name} (${item.id})`
+                            );
                         }
                     } else if (res.length === 1) {
                         if (
+                            simpleInsert !== true &&
                             res[0].configurationParameters !== undefined &&
                             res[0].configurationParameters !== null
                         ) {
@@ -2841,6 +3148,7 @@ export class App extends BaseApp {
                                 undefined,
                                 clearParentElement
                             );
+                            resolve();
                         } else {
                             // Perform an actual insert of an item. Note that we already know if we are
                             // going into a part studio or an assembly.
@@ -2851,9 +3159,9 @@ export class App extends BaseApp {
                                 res[0],
                                 undefined,
                                 itemRaw
-                            );
+                            ).then(() => resolve());
                         }
-                    } else {
+                    } else if (simpleInsert !== true) {
                         this.showItemChoices(
                             item,
                             res,
@@ -2862,9 +3170,10 @@ export class App extends BaseApp {
                             undefined,
                             clearParentElement
                         );
-                    }
-                }
-            );
+                        resolve();
+                    } else resolve();
+                });
+            });
         });
     }
 
@@ -3062,7 +3371,6 @@ export class App extends BaseApp {
             const childThumbnailDiv = createDocumentElement('div', {
                 class: 'select-item-dialog-thumbnail-container os-no-shrink',
             });
-            // console.log('parent: ', parent, 'item: ', item, 'nodeInfo: ', nodeInfo);
             const thumbnailInfo = Object.assign({}, parent);
             thumbnailInfo['elementId'] = item.elementId;
             thumbnailInfo['elementType'] = item.elementType;
@@ -3175,6 +3483,9 @@ export class App extends BaseApp {
                         }
                     }
                     resolve(item);
+                })
+                .catch((err) => {
+                    _reject(err);
                 });
         });
     }
@@ -3249,7 +3560,8 @@ export class App extends BaseApp {
                         item.deterministicId = metaItem.partId;
                         resolve(result);
                     }
-                });
+                })
+                .catch((err) => _reject(err));
         });
     }
 
@@ -3282,8 +3594,8 @@ export class App extends BaseApp {
                 eid: item.elementId,
             });
             // Run them both in parallel and when they are complete we can do our work
-            Promise.all([findPartPromise, itemConfigPromise]).then(
-                ([item, itemConfig]) => {
+            Promise.all([findPartPromise, itemConfigPromise])
+                .then(([item, itemConfig]) => {
                     const result: configInsertInfo = {
                         configList: [],
                         deterministicId: item.deterministicId,
@@ -3338,8 +3650,10 @@ export class App extends BaseApp {
                             elem.value = elem.getAttribute('savedconfigurationvalue');
                         });
                     resolve(result);
-                }
-            );
+                })
+                .catch((err) => {
+                    console.warn(err);
+                });
         });
     }
     /**
@@ -3359,21 +3673,23 @@ export class App extends BaseApp {
                 'https://cad.onshape.com/images/default-document.png'
             );
         }
-        this.getMetaData(item, configuration).then((res) => {
-            const txtdiv = document.getElementById(`ct${index}`);
-            if (txtdiv !== undefined && txtdiv !== null) {
-                txtdiv.textContent = res['Name'];
-            }
-            const img = document.getElementById(`ci${index}`) as HTMLImageElement;
+        this.getMetaData(item, configuration)
+            .then((res) => {
+                const txtdiv = document.getElementById(`ct${index}`);
+                if (txtdiv !== undefined && txtdiv !== null) {
+                    txtdiv.textContent = res['Name'];
+                }
+                const img = document.getElementById(`ci${index}`) as HTMLImageElement;
 
-            if (img !== undefined && img !== null) {
-                this.onshape.replaceThumbnailImage(
-                    img,
-                    res['thumbnail'] as BTThumbnailInfo,
-                    { retry: true, retryInterval: 5 }
-                );
-            }
-        });
+                if (img !== undefined && img !== null) {
+                    this.onshape.replaceThumbnailImage(
+                        img,
+                        res['thumbnail'] as BTThumbnailInfo,
+                        { retry: true, retryInterval: 5 }
+                    );
+                }
+            })
+            .catch((err) => {});
     }
 
     /**
@@ -3389,10 +3705,13 @@ export class App extends BaseApp {
         elementId: string,
         item: BTInsertableInfo,
         insertInfo: configInsertInfo
-    ): void {
-        alert(
-            `Unable to determine how to insert item ${item.id} - ${item.elementName} into ${this.targetDocumentElementInfo.elementType} ${documentId}/w/${workspaceId}/e/${elementId}`
-        );
+    ): Promise<void> {
+        return new Promise((resolve, reject) => {
+            alert(
+                `Unable to determine how to insert item ${item.id} - ${item.elementName} into ${this.targetDocumentElementInfo.elementType} ${documentId}/w/${workspaceId}/e/${elementId}`
+            );
+            resolve();
+        });
     }
     /**
      * Create the configuration structure for inserting into a part
@@ -3483,7 +3802,6 @@ export class App extends BaseApp {
         nodeInfo: BTGlobalTreeNodeInfo,
         insertInfo: configInsertInfo
     ) {
-        // console.log('processing', nodeInfo, insertInfo);
         let documentNodeInfo: BTGlobalTreeNodeInfo = nodeInfo;
         // this.currentNodes.items.forEach((nodeItem: BTGlobalTreeNodeInfo)=>{
         //   if(nodeItem.id == item.documentId)return documentNodeInfo = nodeItem;
@@ -3705,54 +4023,64 @@ export class App extends BaseApp {
         item: BTInsertableInfo,
         insertInfo: configInsertInfo, // configList: configInfo[]
         nodeInfo: BTGlobalTreeNodeInfo
-    ): void {
+    ): Promise<void> {
         // console.log(
         //     `Inserting item ${item.id} - ${item.elementName} into Assembly ${documentId}/w/${workspaceId}/e/${elementId}`
         // );
+        return new Promise((resolve, reject) => {
+            this.setInProgress();
 
-        this.setInProgress();
+            let configuration = undefined;
+            if (insertInfo !== undefined && insertInfo.configList !== undefined) {
+                configuration = this.buildAssemblyConfiguration(
+                    insertInfo.configList,
+                    ''
+                );
+            }
 
-        let configuration = undefined;
-        if (insertInfo !== undefined && insertInfo.configList !== undefined) {
-            configuration = this.buildAssemblyConfiguration(insertInfo.configList, '');
-        }
+            this.onshape.assemblyApi
+                .createInstance({
+                    did: documentId,
+                    wid: workspaceId,
+                    eid: elementId,
+                    bTAssemblyInstanceDefinitionParams: {
+                        _configuration: configuration,
+                        documentId: item.documentId,
+                        elementId: item.elementId,
+                        featureId: '', // item.featureId,
+                        isAssembly: item.elementType == 'ASSEMBLY',
+                        isWholePartStudio: false, // TODO: Figure this out
+                        microversionId: '', // item.microversionId,  // If you do this, it gives an error 400: Microversions may not be used with linked document references
+                        partId: item.deterministicId ?? '',
+                        versionId: item.versionId,
+                    },
+                })
+                .then(() => {
+                    this.setInProgress(false);
+                    this.processRecentlyInserted(nodeInfo, insertInfo);
+                    resolve();
+                })
+                .catch((reason) => {
+                    this.setInProgress(false);
 
-        this.onshape.assemblyApi
-            .createInstance({
-                did: documentId,
-                wid: workspaceId,
-                eid: elementId,
-                bTAssemblyInstanceDefinitionParams: {
-                    _configuration: configuration,
-                    documentId: item.documentId,
-                    elementId: item.elementId,
-                    featureId: '', // item.featureId,
-                    isAssembly: item.elementType == 'ASSEMBLY',
-                    isWholePartStudio: false, // TODO: Figure this out
-                    microversionId: '', // item.microversionId,  // If you do this, it gives an error 400: Microversions may not be used with linked document references
-                    partId: item.deterministicId ?? '',
-                    versionId: item.versionId,
-                },
-            })
-            .then(() => {
-                this.setInProgress(false);
-                this.processRecentlyInserted(nodeInfo, insertInfo);
-            })
-            .catch((reason) => {
-                this.setInProgress(false);
-
-                // TODO: Figure out why we don't get any output when it actually succeeds
-                // post request returns undefined instead of {}
-                if (reason.message !== 'Unexpected end of JSON input') {
-                    console.log('failed to create reason=', reason);
-                }
-            });
+                    // TODO: Figure out why we don't get any output when it actually succeeds
+                    // post request returns undefined instead of {}
+                    if (reason.message !== 'Unexpected end of JSON input') {
+                        console.log('failed to create reason=', reason);
+                    }
+                    resolve();
+                });
+        });
     }
+
+    private inProgressLocked = false;
+
     /**
      * Change the cursor while an operation is in progress
      * @param cursor Cursor to change to 'progress' and 'default' are good ones
      */
     public setInProgress(inprogress: boolean = true) {
+        if (this.inProgressLocked) return;
         const element = document.getElementById('top');
         if (inprogress) {
             element.classList.add('waiting');
@@ -3760,6 +4088,17 @@ export class App extends BaseApp {
             element.classList.remove('waiting');
         }
     }
+
+    /**
+     * Locked means that calling inProgress won't change the in progress status
+     * Useful for performing multiple insertions or requests
+     *  which call setInProgress individually
+     * @param locked
+     */
+    private lockInProgress(locked: boolean = true) {
+        this.inProgressLocked = locked;
+    }
+
     public processLibrariesNode(
         accessId: string,
         pathToRoot: BTGlobalTreeMagicNodeInfo[],
@@ -3845,7 +4184,6 @@ export class App extends BaseApp {
             documentRequests.push(this.onshape.documentApi.getDocument({ did }));
         }
         Promise.all(documentRequests).then((documents: BTGlobalTreeNodeInfo[]) => {
-            console.log(documents);
 
             const recentNode: BTGlobalTreeNodesInfo = {
                 pathToRoot,
@@ -3855,10 +4193,6 @@ export class App extends BaseApp {
             };
             this.ProcessNodeResults(recentNode, accessId, undefined, true);
         });
-        // .getMagicTypeByIndex(index, 'globalLibraries', refreshNodes) //only refresh if we are getting first node
-        // .then((res: BTGlobalTreeNodeInfo[]) => {
-
-        // });
     }
 
     public processInsertablesSearch(
@@ -4014,8 +4348,6 @@ export class App extends BaseApp {
                 if (res === undefined) res = [];
                 let items = res as SearchInfoNode[];
 
-                console.log('Items: ', items);
-
                 const re = new RegExp(match, 'gmi');
                 this.currentSearchItems = (
                     this.currentSearchItems.concat(
@@ -4041,10 +4373,10 @@ export class App extends BaseApp {
                         }) as Array<{ id: string; partNumber: string; name: string }>
                     ) as SearchInfoNode[]
                 ).sort((a, b) => {
-                    if (exactSearch !== undefined && exactSearch !== null) {
+                    if (exactSearch != undefined) {
                         const exact =
-                            (a.name.toLowerCase().indexOf(exactSearch) > 0 ? 0 : 1) -
-                            (b.name.toLowerCase().indexOf(exactSearch) > 0 ? 0 : 1);
+                            (a.name.toLowerCase().indexOf(exactSearch) != -1 ? 0 : 1) -
+                            (b.name.toLowerCase().indexOf(exactSearch) != -1 ? 0 : 1);
                         if (exact !== 0) return exact;
                     }
                     const config =
@@ -4291,28 +4623,44 @@ export class App extends BaseApp {
                 },
             ];
 
-            const item = this.currentSearchItems[index];
-            if (item === undefined || item === null) return resolve(false);
-            if ((item as BTGlobalTreeNodeInfo).jsonType === 'document-summary') {
+            const itemShell = this.currentSearchItems[index];
+            if (itemShell === undefined || itemShell === null) return resolve(false);
+            if ((itemShell as BTGlobalTreeNodeInfo).jsonType === 'document-summary') {
                 const searchNodes: BTGlobalTreeNodesInfo = {
                     pathToRoot,
                     href: undefined,
                     next: (index + 1).toString(),
-                    items: [item as BTGlobalTreeNodeInfo],
+                    items: [itemShell as BTGlobalTreeNodeInfo],
                 };
 
                 if (index === 0) this.addBreadcrumbNode(pathToRoot[0], true);
                 this.ProcessNodeResults(searchNodes, accessId);
-                resolve(true);
+                return resolve(true);
             }
-            this.onshape.documentApi.getDocument({ did: item.id }).then((res) => {
-                if (res === undefined) return resolve(false);
-                res.jsonType = 'document-summary';
+            const promises = [
+                this.onshape.documentApi.getDocument({ did: itemShell.id }),
+                this.resolveDocumentVersion({
+                    jsonType: 'document-summary',
+                    id: itemShell.id,
+                }),
+            ];
+            Promise.all(promises).then((res) => {
+                if (res == undefined) return resolve(false);
+                const item = res[0];
+                if (item == undefined) return resolve(false);
+                const versionInfo = res[1];
+                if (
+                    versionInfo &&
+                    versionInfo.recentVersion &&
+                    versionInfo.recentVersion.id
+                )
+                    item.recentVersion = { id: versionInfo.recentVersion.id };
+                item.jsonType = 'document-summary';
                 const searchNodes: BTGlobalTreeNodesInfo = {
                     pathToRoot,
                     href: undefined,
                     next: (index + 1).toString(),
-                    items: [res],
+                    items: [item],
                 };
                 if (index === 0) this.addBreadcrumbNode(pathToRoot[0], true);
                 this.ProcessNodeResults(searchNodes, accessId);
@@ -4570,6 +4918,7 @@ export class App extends BaseApp {
     public gotoFolder(item: BTGlobalTreeNodeInfo, teamroot?: BTGlobalTreeNodeInfo): void {
         this.hidePopup();
         this.hideActionMenu();
+        this.hideBoxSelect();
 
         // Note that we are running and reset the count of entries we have gotten
         this.loaded = 0;
@@ -4660,9 +5009,15 @@ export class App extends BaseApp {
         } else if (item.jsonType === 'magic' || item.resourceType === 'magic') {
             this.processMagicNode(item.id, accessId);
         } else if (item.jsonType === 'search') {
+            if (item.description === '' || item.description == undefined) {
+                const searchBoxInput = document.getElementById('searchboxinput');
+                if (searchBoxInput != null)
+                    item.description = (searchBoxInput as HTMLInputElement).value;
+                if (item.description === '')
+                    return this.gotoFolder(this.currentBreadcrumbs[1]);
+            }
             this.processSearch(item, accessId);
         } else {
-            // console.log('generic folder', item);
             this.onshape.globalTreeNodesApi
                 .globalTreeNodesFolderInsertables({
                     fid: item.id,
@@ -4674,7 +5029,6 @@ export class App extends BaseApp {
                     includeSurfaces: false,
                 })
                 .then((res) => {
-                    // console.log('generic folder information', res);
                     this.addBreadcrumbNode(
                         (res && res.pathToRoot && res.pathToRoot[0]) || item
                     );
