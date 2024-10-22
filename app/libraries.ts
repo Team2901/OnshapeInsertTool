@@ -861,6 +861,7 @@ export class Library extends Preferences {
                         library,
                         this.encodeLibraryName(folder.name, true)
                     ).then((libraryRaw) => {
+                        
                         resolve(library);
                     });
                 });
@@ -991,12 +992,14 @@ export class Library extends Preferences {
                                     children: BTGlobalTreeNodeInfo[];
                                 };
                             };
+                            globalLogInfo: Object;
                         }
                     >(16);
                     TPU.setGlobalTaskInfo({
                         library: rawLibrary,
                         deltaLibrary,
                         indexedFoldersInfo: {},
+                        globalLogInfo: {folders: {}, parts: []},
                     });
                     TPU.setProcessingFunction((taskInfo, addTask, globalTaskInfo) => {
                         return new Promise((resolve2, reject2) => {
@@ -1007,7 +1010,8 @@ export class Library extends Preferences {
                                 (folder: BTGlobalTreeNodeInfo) => {
                                     addTask({ folder });
                                 },
-                                taskInfo.isLibrary ? true : false
+                                taskInfo.isLibrary ? true : false,
+                                globalTaskInfo.globalLogInfo
                             )
                                 .then(
                                     (indexedFolderInfo: {
@@ -1020,10 +1024,7 @@ export class Library extends Preferences {
                                             if (
                                                 globalTaskInfo.indexedFoldersInfo[
                                                     folder.id
-                                                ] === undefined ||
-                                                globalTaskInfo.indexedFoldersInfo[
-                                                    folder.id
-                                                ] === null
+                                                ] == undefined
                                             ) {
                                                 globalTaskInfo.indexedFoldersInfo[
                                                     folder.id
@@ -1037,6 +1038,7 @@ export class Library extends Preferences {
                                                     ].children
                                                 );
                                             }
+
                                             infoRep.incrementNumber(
                                                 'additions',
                                                 children.length
@@ -1089,13 +1091,15 @@ export class Library extends Preferences {
                     validateParentFolder().then((res) => {
                         if (res === undefined || res === false) resolve(undefined);
                         TPU.addTask({
-                            folder: library,
+                            folder,
                             isLibrary: true,
                         });
-                        infoRep.setString('Status', 'Scanning folders');
+                        infoRep.setString('status', 'Scanning folders');
                         TPU.runTasks().then(() => {
                             const indexedFoldersInfo =
                                 TPU.globalTaskInfo.indexedFoldersInfo;
+
+                            console.log(TPU.globalTaskInfo);
 
                             if (Object.keys(indexedFoldersInfo).length === 0) {
                                 infoRep.setString('status', 'No difference');
@@ -1219,7 +1223,8 @@ export class Library extends Preferences {
         library: BTGlobalTreeNodeInfo,
         deltaLibrary: BTGlobalTreeNodeInfo,
         recurseOnFolder: Function = this.scanFolderDelta,
-        isLibrary?: boolean
+        isLibrary?: boolean,
+        globalInfoLog?: Object
     ): Promise<{ folder: BTGlobalTreeNodeInfo; children: BTGlobalTreeNodeInfo[] }> {
         return new Promise((resolve, reject) => {
             let promises: Promise<BTGlobalTreeNodeInfo[]>[] = [];
@@ -1238,7 +1243,7 @@ export class Library extends Preferences {
             promises.push(this.getAllGlobalTreeNodesFolderInsertables(folderId));
             Promise.all(promises)
                 .then((res) => {
-                    console.log(res);
+                    // console.log(res);
                     const proxyChildren = res[0];
                     const folderChildren = res[1];
                     if (
@@ -1250,12 +1255,12 @@ export class Library extends Preferences {
                         return resolve(undefined);
                     }
                     const additions: BTGlobalTreeNodeInfo[] = [];
-                    console.log('_____');
-                    console.log(proxyChildren, folderChildren);
+                    // console.log('_____');
+                    // console.log(proxyChildren, folderChildren);
 
                     const proxyMap: { [id: string]: BTGlobalTreeNodeInfo } = {};
                     proxyChildren.forEach((child) => (proxyMap[child.id] = child));
-                    console.log(proxyMap);
+                    // console.log(proxyMap);
                     let searchedChild: BTGlobalTreeNodeInfo;
                     folderChildren.forEach((child) => {
                         searchedChild = proxyMap[child.id];
@@ -1271,7 +1276,7 @@ export class Library extends Preferences {
                             }
                         }
                     });
-                    console.log('Additons', additions);
+                    // console.log('Additons', additions);
                     folder = Object.assign({}, folder);
                     const indexedFolderInfo: {
                         folder: BTGlobalTreeNodeInfo;
@@ -1280,19 +1285,53 @@ export class Library extends Preferences {
                         folder,
                         children: additions,
                     };
-                    console.log(proxyMap);
+                    // console.log(proxyMap);
                     Object.values(proxyMap).forEach((child) => {
                         if (child.jsonType === 'proxy-folder') {
                             recurseOnFolder(child);
                         }
                     });
+
+                    {
+                        const fInfo = {
+                            // name: folder.name,
+                            id: folder.id,
+                            // url: folder.href,
+                            path: '',
+                        };
+
+                        const parentId = folder['href'];
+                        // console.log(folder)
+                        if (
+                            parentId != undefined &&
+                            globalInfoLog['folders'][parentId] != undefined
+                        ) {
+                            fInfo['path'] =
+                                globalInfoLog['folders'][parentId]['path'] + ">";
+                        }
+
+                        fInfo['path'] += folder.name;
+
+                        globalInfoLog['folders'][folder.id] = fInfo;
+
+                        folderChildren.forEach((child) => {
+                            if (child.jsonType !== 'document-summary') return;
+                            globalInfoLog['parts'].push({
+                                name: child.name,
+                                id: child.id,
+                                url: child.href,
+                                path: fInfo.path
+                            });
+                        });
+                    }
+
                     if (additions.length === 0) return resolve(undefined);
-                    console.log(
-                        'Additions length is ' +
-                            additions.length +
-                            ' for folder' +
-                            folder.name
-                    );
+                    // console.log(
+                    //     'Additions length is ' +
+                    //         additions.length +
+                    //         ' for folder' +
+                    //         folder.name
+                    // );
                     this.setProxyFolder(deltaLibrary, folder, additions).then(() => {
                         resolve(indexedFolderInfo);
                     });

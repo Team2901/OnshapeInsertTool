@@ -29,11 +29,11 @@ const config = {
 
 if(process.argv.length === 3 && process.argv.at(2) === "mainonly"){
   console.log("mainonly");
-  // config.deleteRemote = false;
-  // config.exclude = config.exclude.concat['*.php', 'dist/*','.htaccess'];
+  config.deleteRemote = false;
+  config.exclude = config.exclude.concat['*.php', 'dist/api/*','.htaccess'];
 }
 
 ftpDeploy
     .deploy(config)
-    .then((res) => console.log('finished:', res, "\n Time" + new Date().toString()))
+    .then((res) => console.log('finished:', res, "\nTime: " + new Date().toString()))
     .catch((err) => console.log(err));

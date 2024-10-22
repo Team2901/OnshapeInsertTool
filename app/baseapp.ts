@@ -45,6 +45,8 @@ export class BaseApp {
     public myserver = ''; // Fill in with your server
     public onshape: OnshapeAPI;
 
+    public displayReady: Promise<any>;
+
     /**
      * Handle any post messages sent to us
      * @param e Event message
@@ -221,6 +223,7 @@ export class BaseApp {
                     });
                     headElement.appendChild(baseRef);
                     if (found) {
+                        const cssPromises: Promise<void>[] = [];
                         found.forEach((item) => {
                             // The Links will be of the following form.  Note that
                             // we only want the stylesheet ones.  We can ignore the others
@@ -243,14 +246,21 @@ export class BaseApp {
                                         rel: 'stylesheet',
                                         type: 'text/css',
                                     });
+                                    cssPromises.push(
+                                        new Promise((resolve, reject) => {
+                                            cssLink.onload = () => resolve();
+                                        })
+                                    );
                                     // Insert the element into the head of the IFrame
                                     headElement.appendChild(cssLink);
                                 }
                             }
                         });
+                        Promise.all(cssPromises).then(() => {
+                            resolve(true);
+                        });
                     }
                 }
-                resolve(true);
             });
         });
     }
@@ -325,27 +335,40 @@ export class BaseApp {
             window.location != window.parent.location
                 ? document.referrer
                 : document.location.href;
+
+        const promises: Promise<any>[] = [];
+
         // Use that URL to scrape out the CSS and patch our Iframe to use the same CSS
-        this.insertOnshapeCSS(url).then((_result) => {
-            //
-            // Cache the ones we need to work with overall
-            //
-            this.documentId = config.documentId;
-            this.elementId = config.elementId;
-            this.workspaceId = config.workspaceId;
-            this.server = config.server;
-            //
-            // Initialize the Onshape APIs
-            //
-            this.onshape = new OnshapeAPI(config);
-            this.onshape
-                .init()
-                .then(() => {
-                    this.initApp();
-                })
-                .catch((reason: string) => {
-                    this.failApp(reason);
-                });
-        });
+        promises.push(this.insertOnshapeCSS(url));
+
+        //
+        // Initialize the Onshape APIs
+        //
+        this.onshape = new OnshapeAPI(config);
+
+        //
+        // Cache the ones we need to work with overall
+        //
+        this.documentId = config.documentId;
+        this.elementId = config.elementId;
+        this.workspaceId = config.workspaceId;
+        // this.server = config.server;
+
+        promises.push(this.onshape.init().then(()=>{
+          this.initApp();
+        }))
+
+        this.displayReady = Promise.all(promises)
+
+        // Promise.all(promises)
+        //     .then(() => {
+        //         //
+        //         // Initialize app
+        //         //
+        //         this.initApp();
+        //     })
+        //     .catch((reason: string) => {
+        //         this.failApp(reason);
+        //     });
     }
 }
