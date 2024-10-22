@@ -415,6 +415,40 @@ export class App extends BaseApp {
         this.startAppContent();
     }
 
+    private initAppContent(): HTMLElement {
+        // Create the main container
+        const div = createDocumentElement('div', { id: 'apptop' });
+        this.createPopupDialog(div);
+        this.createActionMenu(div);
+        this.createBoxSelect(div);
+
+        //Create search div
+        const searchdiv = createDocumentElement('div', {
+            id: 'search',
+            class: 'os-control-container document-version-picker-search-container',
+            style: 'display:none;',
+        });
+        div.appendChild(searchdiv);
+        this.createSearchBar(searchdiv);
+
+        // Create the main div that shows where we are
+        const bcdiv = createDocumentElement('div', {
+            id: 'breadcrumbs',
+            class: 'os-documents-heading-area disable-user-select os-row os-wrap os-align-baseline',
+        });
+        div.appendChild(bcdiv);
+
+        // Create a place holder for the nodes to be dumped into
+        const dumpNodes = createDocumentElement('div', {
+            id: 'dump',
+            class: 'y-overflow',
+        });
+        dumpNodes.oncontextmenu = (e) => e.preventDefault();
+        div.appendChild(dumpNodes);
+
+        return div;
+    }
+
     public startAppContent() {
         this.preferences
             .initUserPreferences(this.appName)
@@ -428,83 +462,68 @@ export class App extends BaseApp {
                         );
                     }
                 }
-                // Create the main container
-                var div = createDocumentElement('div', { id: 'apptop' });
-                this.createPopupDialog(div);
-                this.createActionMenu(div);
-                this.createBoxSelect(div);
 
-                //Create search div
-                var searchdiv = createDocumentElement('div', {
-                    id: 'search',
-                    class: 'os-control-container document-version-picker-search-container',
-                    style: 'display:none;',
-                });
-                div.appendChild(searchdiv);
-                this.createSearchBar(searchdiv);
-
-                // Create the main div that shows where we are
-                var bcdiv = createDocumentElement('div', {
-                    id: 'breadcrumbs',
-                    class: 'os-documents-heading-area disable-user-select os-row os-wrap os-align-baseline',
-                });
-                div.appendChild(bcdiv);
-
-                // Create a place holder for the nodes to be dumped into
-                const dumpNodes = createDocumentElement('div', {
-                    id: 'dump',
-                    class: 'y-overflow',
-                });
-                dumpNodes.oncontextmenu = (e) => e.preventDefault();
-                div.appendChild(dumpNodes);
-
-                this.setAppElements(div);
-                this.setBreadcrumbs([]);
-
-                this.getDocumentElementInfo(
-                    this.documentId,
-                    this.workspaceId,
-                    this.elementId
-                )
-                    .then((val: BTDocumentElementInfo) => {
-                        this.targetDocumentElementInfo = val;
-
-                        if (val.elementType === 'PARTSTUDIO') {
-                            this.insertToTarget = this.insertToPartStudio;
-                        } else if (val.elementType === 'ASSEMBLY') {
-                            this.insertToTarget = this.insertToAssembly;
-                        } else {
-                            this.failApp(
-                                `Only able to insert into PartStudios and Assemblies.  This page is of type ${val.elementType}`
-                            );
-                            return;
-                        }
-
-                        if (this.preferences.newUser) {
-                            return this.gotoFolder({
-                                jsonType: 'magic',
-                                resourceType: 'magic',
-                                id: 'HI',
-                                name: 'Help/Instructions',
-                            });
-                        }
-                        this.getLastLocation().then((lastLocation) => {
-                            if (lastLocation === undefined) {
-                                this.gotoFolder({ jsonType: 'home' });
-                                return;
-                            }
-                            this.setBreadcrumbs(lastLocation);
-                            this.gotoFolder(lastLocation[0]);
+                this.startAppPreferences()
+                    .then((goto) => {
+                        this.displayReady.then(() => {
+                            this.setAppElements(this.initAppContent());
+                            this.gotoFolder(goto);
                         });
                     })
-                    .catch((err) => {
-                        this.failApp(err);
+                    .catch(() => {
+                        this.startAppContent();
                     });
             })
             .catch((err) => {
                 this.failApp(err);
             });
     }
+
+    private startAppPreferences(): Promise<BTGlobalTreeNodeInfo> {
+        return new Promise((resolve, reject) => {
+            if (this.preferences.newUser) {
+                resolve({
+                    jsonType: 'magic',
+                    resourceType: 'magic',
+                    id: 'HI',
+                    name: 'Help/Instructions',
+                });
+            }
+
+            this.getDocumentElementInfo(this.documentId, this.workspaceId, this.elementId)
+                .then((val: BTDocumentElementInfo) => {
+                    this.targetDocumentElementInfo = val;
+
+                    if (val.elementType === 'PARTSTUDIO') {
+                        this.insertToTarget = this.insertToPartStudio;
+                    } else if (val.elementType === 'ASSEMBLY') {
+                        this.insertToTarget = this.insertToAssembly;
+                    } else {
+                        this.failApp(
+                            `Only able to insert into PartStudios and Assemblies.  This page is of type ${val.elementType}`
+                        );
+                        return;
+                    }
+                })
+                .catch((err) => {
+                    this.failApp(err);
+                });
+
+            this.getLastLocation()
+                .then((lastLocation) => {
+                    if (lastLocation === undefined) {
+                        resolve({ jsonType: 'home' });
+                        return;
+                    }
+                    // this.setBreadcrumbs(lastLocation);
+                    resolve(lastLocation[0]);
+                })
+                .catch(() => {
+                    reject();
+                });
+        });
+    }
+
     /**
      * Handle when an app is unable to authenticate or has any other problem when starting
      * @param reason Reason for initialization failure
@@ -549,7 +568,7 @@ export class App extends BaseApp {
                 });
         });
     }
-    currentBreadcrumbs: BTGlobalTreeNodeInfo[];
+    currentBreadcrumbs: BTGlobalTreeNodeInfo[] = [];
     /**
      * Set the breadcrumbs in the header
      * @param node Node to add to breadcrumbs, if the node is already in the breadcrumbs, it will delete the more recent crumbs until that node
@@ -593,13 +612,14 @@ export class App extends BaseApp {
                 pathToRoot: breadcrumbs,
                 teamroot: teamroot,
             });
+        this.currentBreadcrumbs = breadcrumbs;
+
         // Find where they want us to put the breadcrumbs
         const breadcrumbscontainer = document.getElementById('breadcrumbs');
         if (breadcrumbscontainer === undefined || breadcrumbscontainer === null) {
             // If we don't have a place for it, just skip out
             return;
         }
-        this.currentBreadcrumbs = breadcrumbs;
         // This is what Onshape Generates
         //
         // <span ng-if="!documentSearch.searchText" class="documents-filter-heading spaced-filter-name">
@@ -966,6 +986,7 @@ export class App extends BaseApp {
                 id: magicid,
             };
             const row = table.addBodyRow();
+            row.rowClass = 'os-selectable-item';
             const span = createDocumentElement('span');
             const icon = createSVGIcon(magicinfo.icon, 'documents-filter-icon');
             const onclick = () => {
@@ -983,8 +1004,11 @@ export class App extends BaseApp {
             const textspan = createDocumentElement('span', {
                 textContent: magicinfo.label,
             });
-            span.onclick = onclick;
-            span.oncontextmenu = oncontextmenu;
+            // const spanParent = span.parentElement;
+            row.attr({ class: 'os-selectable-item' });
+            row.eventListen({ 'click': onclick, 'contextmenu': oncontextmenu });
+            // span.onclick = onclick;
+            // span.oncontextmenu = oncontextmenu;
             span.appendChild(textspan);
             row.add(span);
         }
@@ -1229,7 +1253,7 @@ export class App extends BaseApp {
         let container = document.getElementById('background');
         if (container === null) {
             container = createDocumentElement('div', {
-                style: 'position:absolute;left:0px;top:0px;width:100%;height:100%;',
+                style: 'position:absolute;left:0px;top:0px;width:100%;height:100%;z-index:-1;',
                 id: 'background',
             });
             const dump = document.getElementById('dump');
@@ -1676,7 +1700,7 @@ export class App extends BaseApp {
                             this.hideActionMenuOptionInputs();
                             document.location.href = [
                                 'mailto:',
-                                'inserttool@ftconshape.com', //
+                                'inserttoolbugs@ftconshape.com', //
                                 '?subject=',
                                 'Flaw in document ',
                                 item.name,
@@ -4184,7 +4208,6 @@ export class App extends BaseApp {
             documentRequests.push(this.onshape.documentApi.getDocument({ did }));
         }
         Promise.all(documentRequests).then((documents: BTGlobalTreeNodeInfo[]) => {
-
             const recentNode: BTGlobalTreeNodesInfo = {
                 pathToRoot,
                 next: (index + 1).toString(),
@@ -4893,21 +4916,33 @@ export class App extends BaseApp {
 
         let parsed = marked.parse(content);
 
-        if (!(parsed instanceof Promise)) parsed = new Promise((res) => res(parsed));
+        if (this.validAccessId(accessId) === false) return;
+        uiDiv.innerHTML = '';
+        container.innerHTML = parsed;
 
-        parsed.then((html) => {
-            if (this.validAccessId(accessId) === false) return;
-            uiDiv.innerHTML = '';
-            container.innerHTML = html;
-
-            Array.from(container.getElementsByTagName('a')).forEach((link) => {
-                link.target = '_blank';
-                link.rel = 'noreferrer noopener';
-                link.onclick = () => window.open(link.href);
-            });
-
-            uiDiv.appendChild(container);
+        Array.from(container.getElementsByTagName('a')).forEach((link) => {
+            link.target = '_blank';
+            link.rel = 'noreferrer noopener';
+            link.onclick = () => window.open(link.href);
         });
+
+        uiDiv.appendChild(container);
+
+        // if (!(parsed instanceof Promise)) parsed = new Promise((res) => res(parsed));
+
+        // parsed.then((html) => {
+        //     if (this.validAccessId(accessId) === false) return;
+        //     uiDiv.innerHTML = '';
+        //     container.innerHTML = html;
+
+        //     Array.from(container.getElementsByTagName('a')).forEach((link) => {
+        //         link.target = '_blank';
+        //         link.rel = 'noreferrer noopener';
+        //         link.onclick = () => window.open(link.href);
+        //     });
+
+        //     uiDiv.appendChild(container);
+        // });
     }
 
     /**

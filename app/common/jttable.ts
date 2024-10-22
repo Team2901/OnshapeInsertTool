@@ -82,6 +82,7 @@ export class JTRow {
     public row: JTRowItems;
     public rowClass: string;
     public attrset: ElemAttributes;
+    public eventList: ElemAttributes;
     constructor(parms?: JTRowParms | JTRowItems) {
         this.celltype = 'td';
         this.row = [];
@@ -107,6 +108,10 @@ export class JTRow {
     }
     public attr(attrset: ElemAttributes): JTRow {
         this.attrset = attrset;
+        return this;
+    }
+    public eventListen(eventList: ElemAttributes) {
+        this.eventList = eventList;
         return this;
     }
     /**
@@ -135,6 +140,11 @@ export class JTRow {
         if (this.attrset !== undefined) {
             for (let v in this.attrset) {
                 row.setAttribute(v, this.attrset[v]);
+            }
+        }
+        if (this.eventList !== undefined) {
+            for (let e in this.eventList) {
+                row.addEventListener(e, this.eventList[e]);
             }
         }
         for (const item of this.row) {

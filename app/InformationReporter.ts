@@ -5,7 +5,7 @@ class InformationReporter<T>{
   private onupdate: (info:T) => void;
 
   constructor(information?:T, onupdate?: (info:T) => void ){
-    this.onupdate = onupdate;
+    this.onupdate = (...args)=>onupdate(...args);
     this._info = information as T;
   }
   set info(value:T){

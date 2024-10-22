@@ -40,6 +40,7 @@ import {
 } from 'onshape-typescript-fetch';
 import { magicIconInfo } from './app';
 import { OnshapeSVGIcon } from './onshape/svgicon';
+import Cookies = require('js-cookie');
 
 export interface BTGlobalTreeProxyInfo extends BTGlobalTreeNodeInfo {
     // jsonType = 'proxy-library', 'proxy-folder', or 'proxy-element'
@@ -120,12 +121,20 @@ export class Preferences {
         // matches the app name.
         this.newUser = false;
         return new Promise((resolve, _reject) => {
+            const prefStore = localStorage.getItem(this.preferenceFileName);
+            if (prefStore != undefined) {
+                this.userPreferencesInfo = JSON.parse(prefStore);
+                return resolve(this.userPreferencesInfo);
+            }
             this.getPreferencesDoc()
                 .then((res) => {
                     if (res === undefined) return resolve(undefined);
                     this.getAppElement(appName, this.userPreferencesInfo)
                         .then((res) => {
-                            console.log(res);
+                            localStorage.setItem(
+                                this.preferenceFileName,
+                                JSON.stringify(res)
+                            );
                             resolve(this.userPreferencesInfo);
                         })
                         .catch((err) => {
@@ -709,7 +718,7 @@ export class Preferences {
                 if (document !== undefined && document !== null) {
                     this.onshape.userId = document.owner.id;
                     this.preferenceFileName = document.name;
-                    if (this.preferenceFileName !== "⚙ Preferences ⚙") {
+                    if (this.preferenceFileName !== '⚙ Preferences ⚙') {
                         //file name must include their id
                         this.onshape.freeUser = true;
                     }
@@ -828,7 +837,8 @@ export class Preferences {
                         (items) => items.name.indexOf('⚙ Preferences ') != -1
                     );
                     if (items.length > 0 && items[0].owner) {
-                        return resolve(items[0]);
+                        const preferences = items[0];
+                        return resolve(preferences);
                     }
                     if (res.items.length === limit) {
                         return resolve(this.findPreferencesDoc(offset + limit));

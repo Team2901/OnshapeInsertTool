@@ -33,9 +33,11 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 
 const package = require('./package.json');
+const { deserialize } = require('v8');
 const toolsVersion = package.version;
 const datebuilt = new Date().toLocaleString();
 
+const app = path.resolve(__dirname, 'app');
 const dist = path.resolve(__dirname, 'dist');
 const dist_api = path.resolve(dist, 'api');
 const server = path.resolve(__dirname, 'server');
@@ -46,7 +48,7 @@ config = {
     stats: 'errors-warnings',
     mode: 'production',
     context: __dirname,
-    entry: [path.join(__dirname, 'app', 'main.ts')],
+    entry: [path.join(app, 'main.ts')],
     output: {
         path: dist,
         publicPath: '',
@@ -71,7 +73,7 @@ config = {
                     transpileOnly: true,
                 },
                 include: [
-                    path.resolve(__dirname, 'app'),
+                    app,
                     path.resolve(__dirname, 'node_modules', 'onshape-typescript-fetch'),
                 ],
             },
@@ -106,6 +108,10 @@ config = {
                                 source: path.resolve(server, 'api', '*'),
                                 destination: dist_api,
                             },
+                            {
+                                source: path.resolve(app, 'static', '*'),
+                                destination: dist
+                            }
                         ],
                     },
                 ],
@@ -120,13 +126,7 @@ config = {
             filename: 'index.html',
             template: path.join(__dirname, 'app', 'index.html'),
             title: 'Onshape Oauth Example',
-        }),
-        new HtmlWebpackPlugin({
-          inject: false,
-          filename: 'INSTRUCTIONS_HELP.md',
-          template: path.join(__dirname, 'app', 'INSTRUCTIONS_HELP.md'),
-          title: 'Instructions and Help file',
-      }),
+        })
     ],
 };
 
