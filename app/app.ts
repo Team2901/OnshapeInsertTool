@@ -241,7 +241,7 @@ export class App extends BaseApp {
         },
         FAVORITE: {
             parentType: ['any'],
-            documentType: ['document-summary'],
+            documentType: ['document-summary', 'proxy-folder', 'folder'],
             name: 'favorite',
             label: 'Loading favorite status...',
         },
@@ -515,7 +515,7 @@ export class App extends BaseApp {
                         resolve({ jsonType: 'home' });
                         return;
                     }
-                    // this.setBreadcrumbs(lastLocation);
+                    this.setBreadcrumbs(lastLocation);
                     resolve(lastLocation[0]);
                 })
                 .catch(() => {
@@ -1006,7 +1006,7 @@ export class App extends BaseApp {
             });
             // const spanParent = span.parentElement;
             row.attr({ class: 'os-selectable-item' });
-            row.eventListen({ 'click': onclick, 'contextmenu': oncontextmenu });
+            row.eventListen({ click: onclick, contextmenu: oncontextmenu });
             // span.onclick = onclick;
             // span.oncontextmenu = oncontextmenu;
             span.appendChild(textspan);
@@ -1224,7 +1224,7 @@ export class App extends BaseApp {
 
             container.appendChild(rowContainer);
 
-            if (subsetConfigurables === true) {
+            if (subsetConfigurables === true && item.jsonType === 'document-summary') {
                 // The configurables should be rendered as subsets to the document
                 this.checkRenderConfig(itemInfo).then((res) => {
                     if (res !== undefined) {
@@ -1673,12 +1673,16 @@ export class App extends BaseApp {
 
                                 const itemFavorited = favoriteItem !== undefined;
 
+                                const documentName =
+                                    item.jsonType === 'document-summary'
+                                        ? 'document'
+                                        : 'folder';
                                 const favoritedStatus = itemFavorited
                                     ? ['Remove', 'from']
                                     : ['Add', 'to'];
                                 this.setElemText(
                                     optionId,
-                                    `${favoritedStatus[0]} document ${favoritedStatus[1]} favorites`
+                                    `${favoritedStatus[0]} ${documentName} ${favoritedStatus[1]} favorites`
                                 );
 
                                 optionElement.onclick = () => {
@@ -4448,7 +4452,7 @@ export class App extends BaseApp {
             .then((res) => {
                 if (res === undefined && res === null)
                     console.error("Active document doesn't exist");
-                this.onshape.globalTreeNodesApi;
+                // this.onshape.globalTreeNodesApi;
                 this.checkInsertItem(res, this.loaded, undefined, true, accessId);
             });
     }

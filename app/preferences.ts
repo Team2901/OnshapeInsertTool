@@ -787,12 +787,16 @@ export class Preferences {
                                     //fix file name
                                     this.preferenceFileName =
                                         '⚙ Preferences ' + this.onshape.userId + '⚙';
-                                    this.onshape.documentApi.updateDocumentAttributes({
-                                        did: res.id,
-                                        bTDocumentParams: {
-                                            name: this.preferenceFileName,
-                                        },
-                                    });
+                                    this.onshape.documentApi
+                                        .updateDocumentAttributes({
+                                            did: res.id,
+                                            bTDocumentParams: {
+                                                name: this.preferenceFileName,
+                                            },
+                                        })
+                                        .catch((err) => {
+                                            reject(err);
+                                        });
                                 }
                                 resolve(this.userPreferencesInfo);
                             }
