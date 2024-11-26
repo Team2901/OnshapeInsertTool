@@ -945,7 +945,7 @@ export class Library extends Preferences {
         library: BTGlobalTreeNodeInfo,
         infoRep: InformationReporter<{
             folders: number;
-            addtions: number;
+            additions: number;
             status: string;
         }>
     ): Promise<BTGlobalTreeNodeInfo> {

@@ -76,6 +76,7 @@ import { Library } from './libraries';
 import { appName as APP_NAME } from './app_settings.json';
 import { InformationReporter } from './InformationReporter';
 import { defaults, marked } from 'marked';
+import { TaskProcessingUnit } from './TaskProcessingUnit';
 
 export interface magicIconInfo {
     label: string;
@@ -118,6 +119,12 @@ export interface metaData {
 export interface folderLocation {
     pathToRoot: BTGlobalTreeNodeInfo[];
     teamroot: BTGlobalTreeNodeInfo;
+}
+
+export interface documentChangeHistory {
+    username: string;
+    date: string;
+    versionName: string;
 }
 
 export interface actionMenuOptionInfo {
@@ -364,7 +371,7 @@ export class App extends BaseApp {
         },
         MOVEDOC: {
             parentType: ['proxy-library', 'proxy-folder'],
-            documentType: ['proxy-document'],
+            documentType: ['document-summary'],
             name: 'movedoc',
             label: 'Move Document',
             userOwned: true,
@@ -402,6 +409,12 @@ export class App extends BaseApp {
             name: 'insertalldocuments',
             label: 'Insert Selected Documents',
             // multiSelect: true,
+        },
+        DOCHISTORY: {
+            parentType: ['any'],
+            documentType: ['document-summary'],
+            name: 'getdocumenthistory',
+            label: 'Get Document Changes History (csv)',
         },
     };
     public preferences: Preferences;
@@ -1018,6 +1031,7 @@ export class App extends BaseApp {
      * @param elem DOM Element to put information into
      */
     public processHome(elem: HTMLElement) {
+        this.removeFileBackground();
         const table = new JTTable({
             class: 'os-document-filter-table full-width',
         });
@@ -1032,7 +1046,9 @@ export class App extends BaseApp {
                 this.processHomeNode(magicid, table);
             }
         }
-        elem.appendChild(table.generate());
+        const genTable = table.generate();
+        genTable.style.zIndex = '1';
+        elem.appendChild(genTable);
         this.setBreadcrumbs([]);
     }
 
@@ -1070,11 +1086,6 @@ export class App extends BaseApp {
         };
         // Iterate over all the items
         const containerBackground = this.getFileBackground();
-        containerBackground.onclick = (event) => {
-            containerBackground.remove();
-            event.preventDefault();
-            //Maybe they are trying to click something behind background
-        };
         containerBackground.oncontextmenu = (event) => {
             event.preventDefault();
             let rect = new DOMRect(
@@ -1253,15 +1264,26 @@ export class App extends BaseApp {
         let container = document.getElementById('background');
         if (container === null) {
             container = createDocumentElement('div', {
-                style: 'position:absolute;left:0px;top:0px;width:100%;height:100%;z-index:-1;',
+                style: 'position:absolute;left:0px;top:0px;width:100%;height:100%;z-index:0;',
                 id: 'background',
             });
             const dump = document.getElementById('dump');
             dump.append(container);
         }
+        container.onclick = (event) => {
+            container.remove();
+            event.preventDefault();
+            //Maybe they are trying to click something behind background
+        };
 
         container.style.top = container.parentElement.offsetTop + 'px';
         return container;
+    }
+
+    public removeFileBackground() {
+        let container = document.getElementById('background');
+        if (container === null) return;
+        container.remove();
     }
 
     /**
@@ -1897,24 +1919,7 @@ export class App extends BaseApp {
                             const inputLibElement = document.getElementById(
                                 optionId + '_lib-name'
                             ) as HTMLInputElement;
-                            this.preferences
-                                .getAllOfMagicType('library')
-                                .then((libraries) => {
-                                    const libraryOptions: Array<{
-                                        id: string;
-                                        label: string;
-                                    }> = [];
-                                    libraries.forEach((library) => {
-                                        libraryOptions.push({
-                                            id: library.id,
-                                            label: library.name,
-                                        });
-                                        this.updateActionMenuInputOptions(
-                                            inputLibElement.id,
-                                            libraryOptions
-                                        );
-                                    });
-                                });
+                            this.updateActionMenuLibraryOptions(inputLibElement.id);
                             inputDiv.style.display = 'flex';
                             submitElement.onclick = (e) => {
                                 e.preventDefault();
@@ -2107,50 +2112,16 @@ export class App extends BaseApp {
                             const inputProxyElement = document.getElementById(
                                 optionId + '_proxy-name'
                             ) as HTMLInputElement;
-                            this.preferences
-                                .getAllOfMagicType('library')
-                                .then((libraries) => {
-                                    const libraryOptions: Array<{
-                                        id: string;
-                                        label: string;
-                                    }> = [];
-                                    libraries.forEach((library) => {
-                                        libraryOptions.push({
-                                            id: library.id,
-                                            label: this.libraries.decodeLibraryName(
-                                                library.name
-                                            ),
-                                        });
-                                    });
-                                    this.updateActionMenuInputOptions(
-                                        inputLibElement.id,
-                                        libraryOptions
-                                    );
-                                });
+                            this.updateActionMenuLibraryOptions(inputLibElement.id);
                             inputLibElement.onchange = () => {
                                 selectedLibrary = undefined;
                                 const libraryId = inputLibElement.value;
-                                this.libraries
-                                    .getProxyLibrary(undefined, libraryId, true)
-                                    .then((library) => {
-                                        selectedLibrary = library.library;
-                                        const descendants = library.descendants;
-                                        if (!descendants) return;
-                                        const folderOptions: Array<{
-                                            id: string;
-                                            label: string;
-                                        }> = [];
-                                        descendants.forEach((descendant) => {
-                                            folderOptions.push({
-                                                id: descendant.id,
-                                                label: descendant.name,
-                                            });
-                                        });
-                                        this.updateActionMenuInputOptions(
-                                            inputProxyElement.id,
-                                            folderOptions
-                                        );
-                                    });
+                                this.updateActionMenuFolderOptions(
+                                    libraryId,
+                                    inputProxyElement.id
+                                ).then((library) => {
+                                    selectedLibrary = library;
+                                });
                             };
                             inputDiv.style.display = 'flex';
                             submitElement.onclick = (e) => {
@@ -2373,6 +2344,65 @@ export class App extends BaseApp {
                             });
                         };
                         break;
+                    }
+                    case 'DOCHISTORY': {
+                        optionElement.onclick = () => {
+                            const infoTextElement = createDocumentElement('span', {
+                                class: 'context-menu-item',
+                                style: 'padding:0px;',
+                            });
+                            optionElement.appendChild(infoTextElement);
+                            let infoRep: any;
+                            infoRep = new InformationReporter<{
+                                found: number;
+                                processed: number;
+                                changesIndexed: number;
+                                status: string;
+                            }>(
+                                { found: 0, processed: 0, changesIndexed: 0, status: '' },
+                                (info: {
+                                    found: number;
+                                    processed: number;
+                                    changesIndexed: number;
+                                    status: string;
+                                }) => {
+                                    if (info.status === 'Fetching Changes') {
+                                        infoTextElement.innerText = `
+                                      🞄 ${info.processed}/${info.found} chunks of changes processed
+                                      🞄 ${info.changesIndexed} changes indexed`;
+                                    } else {
+                                        infoTextElement.innerText = '\n🞄 ' + info.status;
+                                    }
+                                }
+                            );
+                            this.getDocumentChangesHistory(item.id, infoRep).then(
+                                (documentChanges) => {
+                                    if (
+                                        documentChanges == undefined ||
+                                        documentChanges.length === 0
+                                    )
+                                        return;
+                                    let data = 'data:text/csv;charset=utf-8,';
+                                    for (let change of documentChanges) {
+                                        data += `${change.versionName},${change.username},${change.date}\n`;
+                                    }
+                                    //https://stackoverflow.com/a/14966131
+                                    var encodedUri = encodeURI(data);
+                                    var link = document.createElement('a');
+                                    link.setAttribute('href', encodedUri);
+                                    link.setAttribute(
+                                        'download',
+                                        `${item.name}_DocumentHistory.csv`
+                                    );
+                                    document.body.appendChild(link);
+
+                                    link.click();
+
+                                    optionElement.removeChild(infoTextElement);
+                                    this.hideActionMenu();
+                                }
+                            );
+                        };
                     }
                 }
 
@@ -2602,6 +2632,46 @@ export class App extends BaseApp {
 
         parent.appendChild(actionMenuMainDiv);
         this.hideActionMenu();
+    }
+
+    public updateActionMenuFolderOptions(
+        libraryId: string,
+        updateElementId: string
+    ): Promise<BTGlobalTreeMagicNodeInfo> {
+        return new Promise((resolve, reject) => {
+            this.libraries.getProxyLibrary(undefined, libraryId, true).then((library) => {
+                const descendants = library.descendants;
+                if (!descendants) return;
+                const folderOptions: Array<{
+                    id: string;
+                    label: string;
+                }> = [];
+                descendants.forEach((descendant) => {
+                    folderOptions.push({
+                        id: descendant.id,
+                        label: descendant.name,
+                    });
+                });
+                this.updateActionMenuInputOptions(updateElementId, folderOptions);
+                resolve(library.library);
+            });
+        });
+    }
+
+    public updateActionMenuLibraryOptions(updateElementId: string): void {
+        this.preferences.getAllOfMagicType('library').then((libraries) => {
+            const libraryOptions: Array<{
+                id: string;
+                label: string;
+            }> = [];
+            libraries.forEach((library) => {
+                libraryOptions.push({
+                    id: library.id,
+                    label: this.libraries.decodeLibraryName(library.name),
+                });
+            });
+            this.updateActionMenuInputOptions(updateElementId, libraryOptions);
+        });
     }
 
     // public renderActionMenuOptions(options: actionMenuOptionInfo[]) {}
@@ -3280,7 +3350,7 @@ export class App extends BaseApp {
     ): Promise<void> {
         // Clean up the UI so we can populate it with the list
         let uiDiv = parentElement || document.getElementById('dump');
-        this.getFileBackground();
+        // this.getFileBackground();
         if (uiDiv === null) {
             uiDiv = document.body;
         }
@@ -4125,6 +4195,107 @@ export class App extends BaseApp {
      */
     private lockInProgress(locked: boolean = true) {
         this.inProgressLocked = locked;
+    }
+
+    /** */
+
+    public getDocumentChangesHistory(
+        did: string,
+        infoRep: InformationReporter<{
+            found: number;
+            processed: number;
+            changesIndexed: number;
+            status: string;
+        }>
+    ): Promise<documentChangeHistory[]> {
+        return new Promise((resolve, reject) => {
+            infoRep.setString('status', 'Fetching Versions');
+            this.onshape.documentApi
+                // .getVersionGraph({
+                //     did,
+                //     bTVersionGraphRequestInfo: {
+                //         includeAutoVersions: true,
+                //         includeMerges: true,
+                //         includeNonWorkspaceBranches: true,
+                //         includeParentBranches: true,
+                //         limit: 1000,
+                //     },
+                // })
+                .getDocumentWorkspaces({ did })
+                .then((workspaces) => {
+                    if (workspaces == undefined || workspaces.length == 0)
+                        return resolve(undefined);
+
+                    infoRep.setString('status', 'Fetching Changes');
+                    const TPU = new TaskProcessingUnit<
+                        { versionName: string; wid: string; workspaceType: string },
+                        {
+                            did: string;
+                            changeHistory: documentChangeHistory[];
+                            indexedMicroversions: string[];
+                        }
+                    >(10);
+                    TPU.setGlobalTaskInfo({
+                        did,
+                        changeHistory: [],
+                        indexedMicroversions: [],
+                    });
+                    TPU.setProcessingFunction((taskInfo, addTask, globalTaskInfo) => {
+                        return new Promise((resolve2, reject2) => {
+                            this.onshape.documentApi
+                                .getDocumentHistory({
+                                    did,
+                                    wm: taskInfo.workspaceType,
+                                    wmid: taskInfo.wid,
+                                })
+                                .then((res) => {
+                                    if (res == undefined) return resolve2();
+                                    for (let node of res) {
+                                        if (
+                                            globalTaskInfo.indexedMicroversions.indexOf(
+                                                node.microversionId
+                                            ) !== -1
+                                        )
+                                            continue;
+                                        globalTaskInfo.changeHistory.push({
+                                            versionName: taskInfo.versionName,
+                                            date: node.date.toString(),
+                                            username: node.username,
+                                        });
+                                        globalTaskInfo.indexedMicroversions.push(
+                                            node.microversionId
+                                        );
+                                        infoRep.incrementNumber('changesIndexed', 1);
+                                    }
+                                    infoRep.incrementNumber('processed', 1);
+                                    if (res.length !== 50) return resolve2();
+                                    addTask({
+                                        versionName: taskInfo.versionName,
+                                        workspaceType: 'm',
+                                        wid: res[res.length - 1].nextMicroversionId,
+                                    });
+                                    infoRep.incrementNumber('found', 1);
+                                    resolve2();
+                                });
+                        });
+                    });
+                    for (let node of workspaces) {
+                        TPU.addTask({
+                            versionName: node.name,
+                            workspaceType: 'w',
+                            wid: node.id,
+                        });
+                        infoRep.incrementNumber('found', 1);
+                    }
+
+                    const startTime = Date.now();
+                    TPU.runTasks().then(() => {
+                        console.log(TPU.globalTaskInfo.changeHistory.length);
+                        console.log((Date.now() - startTime) / 1000);
+                        return resolve(TPU.globalTaskInfo.changeHistory);
+                    });
+                });
+        });
     }
 
     public processLibrariesNode(
