@@ -32,16 +32,32 @@ The home menu is the default menu which lets users use Insert Tool specific feat
   Users can insert documents to the active part studio or assembly by navigating to them and left-clicking them.
 
   **Configurable Documents**  
-  When configurable documents are selected, the user will be prompted with configuration options. When they fill out these settings and click the generated document, it will be inserted. 
+  When configurable documents are clicked, the user will be prompted with configuration options. When they fill out these settings and click the generated document, it will be inserted. 
 
 ## Breadcrumbs
 
-The breadcrumbs display the path from Home to the current location. Users can click on the crumbs to go to those locations.
+  The breadcrumbs display the path from Home to the current location. Users can click on the crumbs to go to those locations.
 
 ## Action Menu
 
   Right-clicking on documents and folders will prompt an action menu.
   Users can use this menu to add/remove documents from their favorites and also report flaws with the Onshape document.
+
+## Document History
+
+  Users can view a document's history on a spreadsheet. Steps:
+
+  Right-click a document (you must have permissions to view the versions), and click "Get Document Changes History" on the action menu. This will download a csv file.
+
+  Copy [this spreadsheet](https://docs.google.com/spreadsheets/d/1sICcBFcN1jB91jdHT9r_C2cCdiWMSz4ZIUIpqvwDUNo/copy). First, click the "Data" tab in the bottom left corner. Then, go to "File --> "Import" --> "Upload", and import the csv file. When the import options appear, select the dropdown "Import Location", and click "Replace Current Sheet". Then click "Import data".
+
+  Now, you can go to the "Display" tab and see the graph and hours each person has spent.
+
+  The Activity Period controls whether changes are counted as consecutive. It reflects how long someone can think about or look at a model before making another change to it, to be considered working on it.
+
+  For example, a change is made 2 minutes after the previous change. If the Activity Period is < 120, then the changes will count as consecutive. If the Activity Period is >= 120, then the change will not count as consecutive, so no minutes will be counted between the two changes.
+
+  The Edges Control changes how many seconds are counted before the first change of a consecutive set of changes. It reflects how long someone can think about or look at a model before making changes to it, to be considered working on it.
 
   ---
 
