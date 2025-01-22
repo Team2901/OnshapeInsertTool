@@ -77,6 +77,7 @@ import { appName as APP_NAME } from './app_settings.json';
 import { InformationReporter } from './InformationReporter';
 import { defaults, marked } from 'marked';
 import { TaskProcessingUnit } from './TaskProcessingUnit';
+import { FeatureStudios } from './featurestudios';
 
 export interface magicIconInfo {
     label: string;
@@ -154,15 +155,6 @@ export class App extends BaseApp {
     public loadedlimit = 2500; // Maximum number of items we will load
     public targetDocumentElementInfo: BTDocumentElementInfo = {};
     public appName: string = APP_NAME;
-
-    public insertToTarget: (
-        documentId: string,
-        workspaceId: string,
-        elementId: string,
-        item: BTInsertableInfo,
-        insertInfo: configInsertInfo,
-        nodeInfo: BTGlobalTreeNodeInfo
-    ) => Promise<void> = this.insertToOther;
 
     private globalLibrariesNodes: string[] = [
         'f3b99a8450b4f983b1efa03c', //Pitsco
@@ -419,12 +411,14 @@ export class App extends BaseApp {
     };
     public preferences: Preferences;
     public libraries: Library;
+    public featureStudios: FeatureStudios;
     /**
      * The main entry point for an app
      */
     public startApp(): void {
         this.libraries = new Library(this.onshape);
         this.preferences = new Preferences(this.onshape);
+        this.featureStudios = new FeatureStudios(this.onshape);
         this.startAppContent();
     }
 
@@ -507,11 +501,10 @@ export class App extends BaseApp {
                 .then((val: BTDocumentElementInfo) => {
                     this.targetDocumentElementInfo = val;
 
-                    if (val.elementType === 'PARTSTUDIO') {
-                        this.insertToTarget = this.insertToPartStudio;
-                    } else if (val.elementType === 'ASSEMBLY') {
-                        this.insertToTarget = this.insertToAssembly;
-                    } else {
+                    if (
+                        val.elementType !== 'PARTSTUDIO' &&
+                        val.elementType !== 'ASSEMBLY'
+                    ) {
                         this.failApp(
                             `Only able to insert into PartStudios and Assemblies.  This page is of type ${val.elementType}`
                         );
@@ -2964,11 +2957,13 @@ export class App extends BaseApp {
             const insertMap: { [key: string]: BTInsertableInfo } = {};
             const dropParents = new Map<string, Boolean>();
             while (insertables !== undefined && insertables.items.length > 0) {
+                console.log(insertables);
                 for (let element of insertables.items) {
                     if (
                         element.elementType === 'PARTSTUDIO' ||
                         (element.elementType === 'ASSEMBLY' &&
-                            insertType === element.elementType)
+                            insertType === element.elementType) ||
+                        element.elementType === 'FEATURESTUDIO'
                     ) {
                         let elementName = (element.elementName ?? '').toUpperCase();
                         let elementPartName = (element.partName ?? '').toUpperCase();
@@ -3469,18 +3464,30 @@ export class App extends BaseApp {
             const childThumbnailDiv = createDocumentElement('div', {
                 class: 'select-item-dialog-thumbnail-container os-no-shrink',
             });
-            const thumbnailInfo = Object.assign({}, parent);
-            thumbnailInfo['elementId'] = item.elementId;
-            thumbnailInfo['elementType'] = item.elementType;
-            const imgChildThumbnail = this.onshape.createThumbnailImage(thumbnailInfo, {
-                id: `ci${index}`,
-                thumbnailId:
-                    item.predictableThumbnailId !== undefined &&
-                    item.predictableThumbnailId !== null
-                        ? item.predictableThumbnailId
-                        : undefined,
-            });
-            childThumbnailDiv.append(imgChildThumbnail);
+            if (item.elementType == 'FEATURESTUDIO') {
+                const featurescriptThumbnail = createSVGIcon('svg-icon-feature-studio-element');
+                featurescriptThumbnail.id = `ci${index}`;
+                featurescriptThumbnail.style.width = '100%';
+                featurescriptThumbnail.style.height = '100%';
+                
+                childThumbnailDiv.append(featurescriptThumbnail);
+            } else {
+                const thumbnailInfo = Object.assign({}, parent);
+                thumbnailInfo['elementId'] = item.elementId;
+                thumbnailInfo['elementType'] = item.elementType;
+                const imgChildThumbnail = this.onshape.createThumbnailImage(
+                    thumbnailInfo,
+                    {
+                        id: `ci${index}`,
+                        thumbnailId:
+                            item.predictableThumbnailId !== undefined &&
+                            item.predictableThumbnailId !== null
+                                ? item.predictableThumbnailId
+                                : undefined,
+                    }
+                );
+                childThumbnailDiv.append(imgChildThumbnail);
+            }
             const childNameDiv = createDocumentElement('div', {
                 class: 'select-item-dialog-item-name',
                 id: `ct${index}`,
@@ -3928,6 +3935,56 @@ export class App extends BaseApp {
         }
     }
 
+    public insertToTarget(
+        documentId: string,
+        workspaceId: string,
+        elementId: string,
+        item: BTInsertableInfo,
+        insertInfo: configInsertInfo,
+        nodeInfo: BTGlobalTreeNodeInfo
+    ): Promise<void> {
+        let promise: Promise<configInsertInfo>;
+
+        if (item.elementType === 'FEATURESTUDIO') {
+            promise = this.insertToFeatureStudio(
+                item.documentId,
+                item.versionId,
+                item.elementId,
+                item.microversionId
+            );
+        } else if (this.targetDocumentElementInfo.elementType === 'PARTSTUDIO') {
+            promise = this.insertToPartStudio(
+                documentId,
+                workspaceId,
+                elementId,
+                item,
+                insertInfo,
+                nodeInfo
+            );
+        } else if (this.targetDocumentElementInfo.elementType === 'ASSEMBLY') {
+            promise = this.insertToAssembly(
+                documentId,
+                workspaceId,
+                elementId,
+                item,
+                insertInfo,
+                nodeInfo
+            );
+        } else {
+            promise = new Promise<configInsertInfo>((resolve) => resolve(undefined));
+            console.warn('insert element not handled');
+            return;
+        }
+
+        this.setInProgress(true);
+
+        promise.then((newInsertInfo) => {
+            if (newInsertInfo != undefined) insertInfo = newInsertInfo;
+            this.setInProgress(false);
+            this.processRecentlyInserted(nodeInfo, insertInfo);
+        });
+    }
+
     /**
      * Insert an item into a Parts Studio
      * @param documentId Document to insert into
@@ -3935,7 +3992,7 @@ export class App extends BaseApp {
      * @param elementId Element of parts studio to insert into
      * @param item Document element to insert
      */
-    public async insertToPartStudio(
+    public insertToPartStudio(
         documentId: string,
         workspaceId: string,
         elementId: string,
@@ -3943,11 +4000,10 @@ export class App extends BaseApp {
         //        configList: configInfo[]
         insertInfo: configInsertInfo,
         nodeInfo: BTGlobalTreeNodeInfo
-    ): Promise<void> {
-        // console.log(
-        //     `Inserting item ${item.id} - ${item.elementName} into Part Studio ${documentId}/w/${workspaceId}/e/${elementId}`
-        // );
-        this.setInProgress();
+    ): Promise<configInsertInfo> {
+        console.log(
+            `Inserting item ${item.id} - ${item.elementName} into Part Studio ${documentId}/w/${workspaceId}/e/${elementId}`
+        );
         // "feature": {
         //     "btType": "BTMFeature-134",
         //     "namespace": "",
@@ -3982,120 +4038,127 @@ export class App extends BaseApp {
         //   "rejectMicroversionSkew": false,
         //   "serializationVersion": "1.1.23"
 
-        const namespace = this.computeNamespace(item);
+        // this.onshape.partStudioApi.evalFeatureScript({
+        //   did: '',
+        //   wvm: 'w',
+        //   wvmid: '',
+        //   eid: ''
+        // });
 
-        let queryString = 'query=qEverything(EntityType.BODY);';
-        if (item.elementType === 'PARTSTUDIO') {
-            if (item.deterministicId !== undefined && item.deterministicId !== null) {
-                queryString = `query=qTransient("${item.deterministicId}");`;
-            } else if (
-                item.insertableQuery !== undefined &&
-                item.insertableQuery !== null
-            ) {
-                queryString = item.insertableQuery;
-            }
-        }
-        // If we are doing a plain part, we may have to actually ask the configuration in order to get the version of the library that we are inserting from
-        if (insertInfo == undefined) {
-            // Pick some clean defaults to work from
-            insertInfo = {
-                configList: [],
-                libraryVersion: 1746,
-                microversionSkew: false,
-                rejectMicroversionSkew: false,
-                serializationVersion: '1.1.23',
-                sourceMicroversion: undefined,
-            };
-            let wvm = 'w';
-            let wvmid = item.workspaceId;
-            if (item.versionId !== undefined && item.versionId !== null) {
-                wvm = 'v';
-                wvmid = item.versionId;
-            }
-            // Second we need to get all the configuration information for the item
-            const config = await this.onshape.elementApi.getConfiguration({
-                did: item.documentId,
-                wvm: wvm as GetConfigurationWvmEnum,
-                wvmid: wvmid,
-                eid: item.elementId,
-            });
+        return new Promise(async (resolve, reject) => {
+            const namespace = this.computeNamespace(item);
 
-            insertInfo.libraryVersion = config.libraryVersion;
-            insertInfo.microversionSkew = config.microversionSkew;
-            insertInfo.rejectMicroversionSkew = config.rejectMicroversionSkew;
-            insertInfo.serializationVersion = config.serializationVersion;
-            insertInfo.sourceMicroversion = config.sourceMicroversion;
-        }
-
-        const iquery: BTMIndividualQuery138 = {
-            btType: 'BTMIndividualQuery-138',
-            queryStatement: null,
-            // item.insertableQuery,
-            queryString: queryString,
-        };
-        const queryList: BTMParameterQueryList148 = {
-            btType: 'BTMParameterQueryList-148',
-            queries: [iquery],
-            parameterId: 'parts',
-        };
-        const btparameterDerived: BTMParameterDerived864 = {
-            btType: 'BTMParameterDerived-864',
-            parameterId: 'buildFunction',
-            namespace: namespace,
-            imports: [],
-            _configuration: insertInfo.configList
-                ? this.buildPartConfiguration(insertInfo.configList, namespace)
-                : undefined,
-        };
-        this.onshape.partStudioApi
-            .addPartStudioFeature({
-                did: documentId,
-                wvm: 'w',
-                wvmid: workspaceId,
-                eid: elementId,
-                bTFeatureDefinitionCall1406: {
-                    feature: {
-                        btType: 'BTMFeature-134',
-                        // featureId: "", // wasn't supplied
-                        namespace: '', // Where does this come from?
-                        name: `Derived ${item.elementName}`,
-                        suppressed: false,
-                        parameters: [queryList, btparameterDerived],
-                        featureType: 'importDerived', // Where does this come from?
-                        subFeatures: [],
-                        // importMicroversion: "", // importMicroversion wasn't supplied
-                        // nodeId: "", // NodeId wasn't supplied
-                        returnAfterSubfeatures: false, // Why is this
-                        // suppressionConfigured: false, // When would it be true
-                        // variableStudioReference: false, // When would it be true
-                    },
-                    libraryVersion: insertInfo.libraryVersion,
-                    microversionSkew: insertInfo.microversionSkew,
-                    rejectMicroversionSkew: insertInfo.rejectMicroversionSkew,
-                    serializationVersion: insertInfo.serializationVersion,
-                    // sourceMicroversion: insertInfo.sourceMicroversion,  // Don't set this or it fails
-                    // documentId: item.documentId,
-                    // elementId: item.elementId,
-                    // featureId: '', // item.featureId,
-                    // isAssembly: item.elementType == 'ASSEMBLY',
-                    // isWholePartStudio: false, // TODO: Figure this out
-                    // microversionId: '', // item.microversionId,  // If you do this, it gives an error 400: Microversions may not be used with linked document references
-                    // partId: item.deterministicId ?? '',
-                    // versionId: item.versionId,
-                },
-            })
-            .then(() => {
-                this.setInProgress(false);
-                this.processRecentlyInserted(nodeInfo, insertInfo);
-            })
-            .catch((reason) => {
-                this.setInProgress(false);
-
-                // TODO: Figure out why we don't get any output when it actually succeeds
-                if (reason !== 'Unexpected end of JSON input') {
-                    console.log(`failed to create reason=${reason}`);
+            let queryString = 'query=qEverything(EntityType.BODY);';
+            if (item.elementType === 'PARTSTUDIO') {
+                if (item.deterministicId !== undefined && item.deterministicId !== null) {
+                    queryString = `query=qTransient("${item.deterministicId}");`;
+                } else if (
+                    item.insertableQuery !== undefined &&
+                    item.insertableQuery !== null
+                ) {
+                    queryString = item.insertableQuery;
                 }
-            });
+            }
+            // If we are doing a plain part, we may have to actually ask the configuration in order to get the version of the library that we are inserting from
+            if (insertInfo == undefined) {
+                // Pick some clean defaults to work from
+                insertInfo = {
+                    configList: [],
+                    libraryVersion: 1746,
+                    microversionSkew: false,
+                    rejectMicroversionSkew: false,
+                    serializationVersion: '1.1.23',
+                    sourceMicroversion: undefined,
+                };
+                let wvm = 'w';
+                let wvmid = item.workspaceId;
+                if (item.versionId !== undefined && item.versionId !== null) {
+                    wvm = 'v';
+                    wvmid = item.versionId;
+                }
+                // Second we need to get all the configuration information for the item
+                const config = await this.onshape.elementApi.getConfiguration({
+                    did: item.documentId,
+                    wvm: wvm as GetConfigurationWvmEnum,
+                    wvmid: wvmid,
+                    eid: item.elementId,
+                });
+
+                insertInfo.libraryVersion = config.libraryVersion;
+                insertInfo.microversionSkew = config.microversionSkew;
+                insertInfo.rejectMicroversionSkew = config.rejectMicroversionSkew;
+                insertInfo.serializationVersion = config.serializationVersion;
+                insertInfo.sourceMicroversion = config.sourceMicroversion;
+            }
+
+            const iquery: BTMIndividualQuery138 = {
+                btType: 'BTMIndividualQuery-138',
+                queryStatement: null,
+                // item.insertableQuery,
+                queryString: queryString,
+            };
+            const queryList: BTMParameterQueryList148 = {
+                btType: 'BTMParameterQueryList-148',
+                queries: [iquery],
+                parameterId: 'parts',
+            };
+            const btparameterDerived: BTMParameterDerived864 = {
+                btType: 'BTMParameterDerived-864',
+                parameterId: 'buildFunction',
+                namespace: namespace,
+                imports: [],
+                _configuration: insertInfo.configList
+                    ? this.buildPartConfiguration(insertInfo.configList, namespace)
+                    : undefined,
+            };
+            this.onshape.partStudioApi
+                .addPartStudioFeature({
+                    did: documentId,
+                    wvm: 'w',
+                    wvmid: workspaceId,
+                    eid: elementId,
+                    bTFeatureDefinitionCall1406: {
+                        feature: {
+                            btType: 'BTMFeature-134',
+                            // featureId: "", // wasn't supplied
+                            namespace: '', // Where does this come from?
+                            name: `Derived ${item.elementName}`,
+                            suppressed: false,
+                            parameters: [queryList, btparameterDerived],
+                            featureType: 'importDerived', // Where does this come from?
+                            subFeatures: [],
+                            // importMicroversion: "", // importMicroversion wasn't supplied
+                            // nodeId: "", // NodeId wasn't supplied
+                            returnAfterSubfeatures: false, // Why is this
+                            // suppressionConfigured: false, // When would it be true
+                            // variableStudioReference: false, // When would it be true
+                        },
+                        libraryVersion: insertInfo.libraryVersion,
+                        microversionSkew: insertInfo.microversionSkew,
+                        rejectMicroversionSkew: insertInfo.rejectMicroversionSkew,
+                        serializationVersion: insertInfo.serializationVersion,
+                        // sourceMicroversion: insertInfo.sourceMicroversion,  // Don't set this or it fails
+                        // documentId: item.documentId,
+                        // elementId: item.elementId,
+                        // featureId: '', // item.featureId,
+                        // isAssembly: item.elementType == 'ASSEMBLY',
+                        // isWholePartStudio: false, // TODO: Figure this out
+                        // microversionId: '', // item.microversionId,  // If you do this, it gives an error 400: Microversions may not be used with linked document references
+                        // partId: item.deterministicId ?? '',
+                        // versionId: item.versionId,
+                    },
+                })
+                .then(() => {
+                    resolve(insertInfo);
+                })
+                .catch((reason) => {
+                    // TODO: Figure out why we don't get any output when it actually succeeds
+                    if (reason !== 'Unexpected end of JSON input') {
+                        console.log(`failed to create reason=${reason}`);
+                    }
+                    resolve(undefined);
+                });
+        });
     }
     public computeNamespace(item: BTInsertableInfo) {
         let wvid = `w${item.workspaceId}`;
@@ -4121,13 +4184,11 @@ export class App extends BaseApp {
         item: BTInsertableInfo,
         insertInfo: configInsertInfo, // configList: configInfo[]
         nodeInfo: BTGlobalTreeNodeInfo
-    ): Promise<void> {
+    ): Promise<configInsertInfo> {
         // console.log(
         //     `Inserting item ${item.id} - ${item.elementName} into Assembly ${documentId}/w/${workspaceId}/e/${elementId}`
         // );
         return new Promise((resolve, reject) => {
-            this.setInProgress();
-
             let configuration = undefined;
             if (insertInfo !== undefined && insertInfo.configList !== undefined) {
                 configuration = this.buildAssemblyConfiguration(
@@ -4154,19 +4215,41 @@ export class App extends BaseApp {
                     },
                 })
                 .then(() => {
-                    this.setInProgress(false);
-                    this.processRecentlyInserted(nodeInfo, insertInfo);
-                    resolve();
+                    resolve(insertInfo);
                 })
                 .catch((reason) => {
-                    this.setInProgress(false);
-
                     // TODO: Figure out why we don't get any output when it actually succeeds
                     // post request returns undefined instead of {}
                     if (reason.message !== 'Unexpected end of JSON input') {
                         console.log('failed to create reason=', reason);
                     }
-                    resolve();
+                    resolve(undefined);
+                });
+        });
+    }
+
+    public insertToFeatureStudio(
+        documentId: string,
+        versionId: string,
+        elementId: string,
+        microversionId: string
+    ): Promise<configInsertInfo> {
+        return new Promise((resolve, reject) => {
+            this.featureStudios
+                .appendToFeatureStudio(
+                    [
+                        {
+                            did: documentId,
+                            vid: versionId,
+                            eid: elementId,
+                            mvid: microversionId,
+                        },
+                    ],
+                    this.documentId,
+                    this.workspaceId
+                )
+                .then((res) => {
+                    resolve(undefined);
                 });
         });
     }
