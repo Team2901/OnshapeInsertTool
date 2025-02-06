@@ -157,13 +157,15 @@ export class App extends BaseApp {
     public appName: string = APP_NAME;
 
     private globalLibrariesNodes: string[] = [
-        'f3b99a8450b4f983b1efa03c', //Pitsco
-        '65d1b86ea725f780582d9dd0', //GoBILDA
         '2fd951db6d0261aba5f16a5d', //AndyMark
-        '1348b49fc35396eed14d589b', //ServoCity
-        'b71490095d0a6e87f29c4975', //REV Robotics
+        '65d1b86ea725f780582d9dd0', //GoBILDA
         'f4aa6bf18a572782640d6476', //Modern Robotics
+        'f3b99a8450b4f983b1efa03c', //Pitsco
+        'b71490095d0a6e87f29c4975', //REV Robotics
+        '1348b49fc35396eed14d589b', //ServoCity
+        '48ccfa30daa8fc8dad88f0eb', //Studica
         'ef69c7f97eac419fe24faf1d', //Other Robotics Vendors
+        '07986b342f5e967bbfd021f8', //LoonyLib
     ];
 
     public magicInfo: { [item: string]: magicIconInfo } = {
@@ -232,6 +234,12 @@ export class App extends BaseApp {
         //     label: 'Remove from home (not implemented)',
         //     deleteIcon: true,
         // },
+        OPEN: {
+            parentType: ['any'],
+            documentType: ['document-summary', 'document-summary-config'],
+            name: 'open',
+            label: 'Open document in new tab',
+        },
         REPORT: {
             parentType: ['any'],
             documentType: ['document-summary', 'document-summary-config'],
@@ -365,15 +373,20 @@ export class App extends BaseApp {
             parentType: ['proxy-library', 'proxy-folder'],
             documentType: ['document-summary'],
             name: 'movedoc',
-            label: 'Move Document',
+            label: 'Move document',
             userOwned: true,
             input: [
-                {
-                    name: 'newlocation',
-                    label: 'New location',
-                    type: 'select',
-                },
-            ],
+              {
+                  name: 'lib-name',
+                  label: 'Library',
+                  type: 'select',
+              },
+              {
+                  name: 'proxy-name',
+                  label: 'Folder (Optional)',
+                  type: 'select',
+              },
+          ],
         },
         CLONEFOLDER: {
             parentType: ['any'],
@@ -521,7 +534,7 @@ export class App extends BaseApp {
                         resolve({ jsonType: 'home' });
                         return;
                     }
-                    this.setBreadcrumbs(lastLocation);
+                    this.setBreadcrumbs(lastLocation,undefined,true);
                     resolve(lastLocation[0]);
                 })
                 .catch(() => {
@@ -606,14 +619,14 @@ export class App extends BaseApp {
      * Set the breadcrumbs in the header
      * @param breadcrumbs Array of breadcrumbs (in reverse order)
      * @param teamroot Preserved team root so that we know when we are processing a folder under a team
-     * @param temporary true means that the node will not be saved to the preferences file
+     * @param skipSave true means that the node will not be saved to the preferences file
      */
     public setBreadcrumbs(
         breadcrumbs: BTGlobalTreeNodeInfo[],
         teamroot?: BTGlobalTreeNodeInfo,
-        temporary: boolean = false
+        skipSave: boolean = false
     ): void {
-        if (temporary !== true)
+        if (skipSave !== true)
             this.saveLastLocation({
                 pathToRoot: breadcrumbs,
                 teamroot: teamroot,
@@ -1142,12 +1155,10 @@ export class App extends BaseApp {
             let img = undefined;
             if (item.jsonType === 'team-summary') {
                 img = createSVGIcon('svg-icon-team', 'folder-list-icon');
-            } else if (item.jsonType === 'proxy-library') {
-                img = createSVGIcon('svg-icon-library', 'folder-list-icon');
-            } else if (item.isContainer) {
-                // if item is container
-                img = createSVGIcon('svg-icon-folder', 'folder-list-icon');
-            } else if (item.jsonType === 'document-summary') {
+            } else if (
+                item.jsonType === 'document-summary' ||
+                this.globalLibrariesNodes.indexOf(item.id) !== -1
+            ) {
                 // It has an image, so request the thumbnail to be loaded for it
                 img = this.onshape.createThumbnailImage(itemInfo);
                 img.classList.add('os-thumbnail-image');
@@ -1156,6 +1167,11 @@ export class App extends BaseApp {
                 img.ondragstart = (_ev) => {
                     return false;
                 };
+            } else if (item.jsonType === 'proxy-library') {
+                img = createSVGIcon('svg-icon-library', 'folder-list-icon');
+            } else if (item.isContainer) {
+                // if item is container
+                img = createSVGIcon('svg-icon-folder', 'folder-list-icon');
             }
             if (img !== undefined) {
                 iconCol.appendChild(img);
@@ -1665,6 +1681,12 @@ export class App extends BaseApp {
                         } else {
                             this.setElemText(optionId, item.name + ' ');
                         }
+                        break;
+                    }
+                    case 'OPEN': {
+                        optionElement.onclick = () => {
+                            window.open(`https://cad.onshape.com/documents/${item.id}`, '_blank').focus();
+                        };
                         break;
                     }
                     case 'FAVORITE': {
@@ -2936,7 +2958,7 @@ export class App extends BaseApp {
                 includeSketches: false,
                 includeReferenceFeatures: false,
                 includeAssemblies: true,
-                includeFeatureStudios: false,
+                includeFeatureStudios: true,
                 includeBlobs: false,
                 includePartStudios: true,
                 includeFeatures: true,
@@ -3465,11 +3487,13 @@ export class App extends BaseApp {
                 class: 'select-item-dialog-thumbnail-container os-no-shrink',
             });
             if (item.elementType == 'FEATURESTUDIO') {
-                const featurescriptThumbnail = createSVGIcon('svg-icon-feature-studio-element');
+                const featurescriptThumbnail = createSVGIcon(
+                    'svg-icon-feature-studio-element'
+                );
                 featurescriptThumbnail.id = `ci${index}`;
                 featurescriptThumbnail.style.width = '100%';
                 featurescriptThumbnail.style.height = '100%';
-                
+
                 childThumbnailDiv.append(featurescriptThumbnail);
             } else {
                 const thumbnailInfo = Object.assign({}, parent);
@@ -3943,45 +3967,48 @@ export class App extends BaseApp {
         insertInfo: configInsertInfo,
         nodeInfo: BTGlobalTreeNodeInfo
     ): Promise<void> {
-        let promise: Promise<configInsertInfo>;
+        return new Promise((resolve, reject) => {
+            let promise: Promise<configInsertInfo>;
 
-        if (item.elementType === 'FEATURESTUDIO') {
-            promise = this.insertToFeatureStudio(
-                item.documentId,
-                item.versionId,
-                item.elementId,
-                item.microversionId
-            );
-        } else if (this.targetDocumentElementInfo.elementType === 'PARTSTUDIO') {
-            promise = this.insertToPartStudio(
-                documentId,
-                workspaceId,
-                elementId,
-                item,
-                insertInfo,
-                nodeInfo
-            );
-        } else if (this.targetDocumentElementInfo.elementType === 'ASSEMBLY') {
-            promise = this.insertToAssembly(
-                documentId,
-                workspaceId,
-                elementId,
-                item,
-                insertInfo,
-                nodeInfo
-            );
-        } else {
-            promise = new Promise<configInsertInfo>((resolve) => resolve(undefined));
-            console.warn('insert element not handled');
-            return;
-        }
+            if (item.elementType === 'FEATURESTUDIO') {
+                promise = this.insertToFeatureStudio(
+                    item.documentId,
+                    item.versionId,
+                    item.elementId,
+                    item.microversionId
+                );
+            } else if (this.targetDocumentElementInfo.elementType === 'PARTSTUDIO') {
+                promise = this.insertToPartStudio(
+                    documentId,
+                    workspaceId,
+                    elementId,
+                    item,
+                    insertInfo,
+                    nodeInfo
+                );
+            } else if (this.targetDocumentElementInfo.elementType === 'ASSEMBLY') {
+                promise = this.insertToAssembly(
+                    documentId,
+                    workspaceId,
+                    elementId,
+                    item,
+                    insertInfo,
+                    nodeInfo
+                );
+            } else {
+                promise = new Promise<configInsertInfo>((resolve) => resolve(undefined));
+                console.warn('insert element not handled');
+                return;
+            }
 
-        this.setInProgress(true);
+            this.setInProgress(true);
 
-        promise.then((newInsertInfo) => {
-            if (newInsertInfo != undefined) insertInfo = newInsertInfo;
-            this.setInProgress(false);
-            this.processRecentlyInserted(nodeInfo, insertInfo);
+            promise.then((newInsertInfo) => {
+                if (newInsertInfo != undefined) insertInfo = newInsertInfo;
+                this.setInProgress(false);
+                this.processRecentlyInserted(nodeInfo, insertInfo);
+                resolve();
+            });
         });
     }
 

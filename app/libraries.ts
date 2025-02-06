@@ -11,6 +11,11 @@ import { InformationReporter } from './InformationReporter';
 
 const SPECIALCHAR = '⏍';
 
+const NestedLibraries = [
+    '38f18577a226e6be9ba0cf83', //Studica (Under "Other Robotics Vendors")
+    '5d10365ab838830d489122f9', //LoonyLib (Under "Other Robotics Vendors")
+];
+
 interface deltaInfo {
     type: string;
     folder?: BTGlobalTreeNodeInfo;
@@ -443,7 +448,9 @@ export class Library extends Preferences {
         return new Promise((resolve, reject) => {
             this.getAllGlobalTreeNodesFolderInsertables(folder.id)
                 .then((res) => {
-                    const children = res as BTGlobalTreeNodeInfo[];
+                    let children = res.filter((child) => {
+                        return NestedLibraries.indexOf(child.id) == -1;
+                    });
 
                     //change folders to proxy-folders
                     children.forEach((child, index) => {
@@ -861,7 +868,6 @@ export class Library extends Preferences {
                         library,
                         this.encodeLibraryName(folder.name, true)
                     ).then((libraryRaw) => {
-                        
                         resolve(library);
                     });
                 });
@@ -999,7 +1005,7 @@ export class Library extends Preferences {
                         library: rawLibrary,
                         deltaLibrary,
                         indexedFoldersInfo: {},
-                        globalLogInfo: {folders: {}, parts: []},
+                        globalLogInfo: { folders: {}, parts: [] },
                     });
                     TPU.setProcessingFunction((taskInfo, addTask, globalTaskInfo) => {
                         return new Promise((resolve2, reject2) => {
@@ -1307,7 +1313,7 @@ export class Library extends Preferences {
                             globalInfoLog['folders'][parentId] != undefined
                         ) {
                             fInfo['path'] =
-                                globalInfoLog['folders'][parentId]['path'] + ">";
+                                globalInfoLog['folders'][parentId]['path'] + '>';
                         }
 
                         fInfo['path'] += folder.name;
@@ -1320,7 +1326,7 @@ export class Library extends Preferences {
                                 name: child.name,
                                 id: child.id,
                                 url: child.href,
-                                path: fInfo.path
+                                path: fInfo.path,
                             });
                         });
                     }

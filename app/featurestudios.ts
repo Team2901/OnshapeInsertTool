@@ -1,6 +1,6 @@
 import { OnshapeAPI } from './onshapeapi';
 
-export interface featureScriptImport {
+export interface featureStudioImport {
     did: string;
     vid: string;
     eid: string;
@@ -75,7 +75,7 @@ export class FeatureStudios {
     }
 
     public appendToFeatureStudio(
-        imports: featureScriptImport[],
+        imports: featureStudioImport[],
         documentId: string,
         workspaceId: string
     ): Promise<boolean> {
@@ -122,9 +122,7 @@ export class FeatureStudios {
                         let updatedScript = this.PREFIX_COMMENT + '\n';
                         updatedScript += `FeatureScript ${Number(
                             this.FEATURE_SCRIPT_VERSION
-                        )};\nimport(path : "onshape/std/geometry.fs", version : "${
-                            this.FEATURE_SCRIPT_VERSION
-                        }");\n`;
+                        )};\n`;
                         for (let importFeature of imports) {
                             updatedScript += `export import ( path : "${importFeature.did}/${importFeature.vid}/${importFeature.eid}", version: "${importFeature.mvid}");\n`;
                         }
