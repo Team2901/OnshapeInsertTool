@@ -65,7 +65,7 @@ export class BaseApp {
             //         "'."
             // );
             if (e.data && e.data.messageName) {
-                console.log("Message name = '" + e.data.messageName + "'");
+                // console.log("Message name = '" + e.data.messageName + "'");
             } else {
                 // console.log('Message name not found. Ignoring message.');
             }
@@ -143,7 +143,7 @@ export class BaseApp {
             messageName: 'applicationInit',
         };
         // console.log('Posting message: %o', message);
-        window.parent.postMessage(message, '*');
+        window.parent.postMessage(message, 'https://cad.onshape.com');
     }
     /**
      * Add a listener for any post messages from Onshape.  When they come in,
