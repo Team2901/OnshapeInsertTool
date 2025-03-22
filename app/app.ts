@@ -155,6 +155,7 @@ export class App extends BaseApp {
     public loadedlimit = 2500; // Maximum number of items we will load
     public targetDocumentElementInfo: BTDocumentElementInfo = {};
     public appName: string = APP_NAME;
+    public searchLoadChunk = 10; // Number of documents to load at a time for search results
 
     private globalLibrariesNodes: string[] = [
         '2fd951db6d0261aba5f16a5d', //AndyMark
@@ -376,17 +377,17 @@ export class App extends BaseApp {
             label: 'Move document',
             userOwned: true,
             input: [
-              {
-                  name: 'lib-name',
-                  label: 'Library',
-                  type: 'select',
-              },
-              {
-                  name: 'proxy-name',
-                  label: 'Folder (Optional)',
-                  type: 'select',
-              },
-          ],
+                {
+                    name: 'lib-name',
+                    label: 'Library',
+                    type: 'select',
+                },
+                {
+                    name: 'proxy-name',
+                    label: 'Folder (Optional)',
+                    type: 'select',
+                },
+            ],
         },
         CLONEFOLDER: {
             parentType: ['any'],
@@ -478,7 +479,7 @@ export class App extends BaseApp {
                         return this.startAppContent();
                     } else {
                         console.error(
-                            'Cannot create initallize user preferences. They are not a free user'
+                            'Cannot create initialize user preferences. They are not a free user'
                         );
                     }
                 }
@@ -510,6 +511,16 @@ export class App extends BaseApp {
                 });
             }
 
+            // const initMessage = {
+            //   documentId:  this.onshape.documentId,    // required - parsed from action url
+            //   workspaceId: this.onshape.workspaceId,   // required - parsed from action url
+            //   elementId:   this.onshape.elementId,     // required - parsed from action url
+            //   messageName: "applicationInit" // required
+            // };
+
+            // window.addEventListener('message',(e)=>console.log(e));
+            // window.parent.postMessage(initMessage, '*');
+
             this.getDocumentElementInfo(this.documentId, this.workspaceId, this.elementId)
                 .then((val: BTDocumentElementInfo) => {
                     this.targetDocumentElementInfo = val;
@@ -534,7 +545,7 @@ export class App extends BaseApp {
                         resolve({ jsonType: 'home' });
                         return;
                     }
-                    this.setBreadcrumbs(lastLocation,undefined,true);
+                    this.setBreadcrumbs(lastLocation, undefined, true);
                     resolve(lastLocation[0]);
                 })
                 .catch(() => {
@@ -1685,7 +1696,12 @@ export class App extends BaseApp {
                     }
                     case 'OPEN': {
                         optionElement.onclick = () => {
-                            window.open(`https://cad.onshape.com/documents/${item.id}`, '_blank').focus();
+                            window
+                                .open(
+                                    `https://cad.onshape.com/documents/${item.id}`,
+                                    '_blank'
+                                )
+                                .focus();
                         };
                         break;
                     }
@@ -1739,18 +1755,10 @@ export class App extends BaseApp {
                     case 'REPORT': {
                         optionElement.onclick = () => {
                             this.hideActionMenuOptionInputs();
-                            document.location.href = [
-                                'mailto:',
-                                'inserttoolbugs@ftconshape.com', //
-                                '?subject=',
-                                'Flaw in document ',
-                                item.name,
-                                '&body=',
-                                ' Document ',
-                                item.name,
-                                '(' + item.id + ')',
-                                ' has a flaw.',
-                            ].join('');
+                            window.open(
+                                `mailto:inserttoolbugs@ftconshape.com?subject=Flaw in document: ${item.name}&body=Document ${item.name} (${item.id}) has a flaw.`,
+                                '_blank'
+                            );
                             this.hideActionMenu();
                         };
                         break;
@@ -4945,6 +4953,34 @@ export class App extends BaseApp {
                 this.ProcessNodeResults(searchNodes, accessId);
                 return resolve(true);
             }
+            const promises = [];
+            for (let i = 0; i < this.searchLoadChunk; i++) {
+                if (index + i >= this.currentSearchItems.length) continue;
+                promises.push(
+                    this.getSearchDocumentInfo(
+                        this.currentSearchItems[index + i] as SearchInfoNode
+                    )
+                );
+            }
+            Promise.all(promises).then((items) => {
+                items = items.filter((item) => item != undefined);
+                const searchNodes: BTGlobalTreeNodesInfo = {
+                    pathToRoot,
+                    href: undefined,
+                    next: (index + this.searchLoadChunk).toString(),
+                    items,
+                };
+                if (index === 0) this.addBreadcrumbNode(pathToRoot[0], true);
+                this.ProcessNodeResults(searchNodes, accessId);
+                resolve(true);
+            });
+        });
+    }
+
+    private getSearchDocumentInfo(
+        itemShell: SearchInfoNode
+    ): Promise<BTGlobalTreeNodeInfo> {
+        return new Promise((resolve, reject) => {
             const promises = [
                 this.onshape.documentApi.getDocument({ did: itemShell.id }),
                 this.resolveDocumentVersion({
@@ -4953,9 +4989,9 @@ export class App extends BaseApp {
                 }),
             ];
             Promise.all(promises).then((res) => {
-                if (res == undefined) return resolve(false);
+                if (res == undefined) return resolve(undefined);
                 const item = res[0];
-                if (item == undefined) return resolve(false);
+                if (item == undefined) return resolve(undefined);
                 const versionInfo = res[1];
                 if (
                     versionInfo &&
@@ -4964,15 +5000,7 @@ export class App extends BaseApp {
                 )
                     item.recentVersion = { id: versionInfo.recentVersion.id };
                 item.jsonType = 'document-summary';
-                const searchNodes: BTGlobalTreeNodesInfo = {
-                    pathToRoot,
-                    href: undefined,
-                    next: (index + 1).toString(),
-                    items: [item],
-                };
-                if (index === 0) this.addBreadcrumbNode(pathToRoot[0], true);
-                this.ProcessNodeResults(searchNodes, accessId);
-                resolve(true);
+                resolve(item);
             });
         });
     }
