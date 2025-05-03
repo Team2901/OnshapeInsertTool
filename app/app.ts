@@ -73,7 +73,7 @@ import {
     Preferences,
 } from './preferences';
 import { Library } from './libraries';
-import { appName as APP_NAME } from './app_settings.json';
+import { appName as APP_NAME } from '../app_settings.json';
 import { InformationReporter } from './InformationReporter';
 import { defaults, marked } from 'marked';
 import { TaskProcessingUnit } from './TaskProcessingUnit';

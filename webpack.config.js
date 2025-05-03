@@ -111,6 +111,10 @@ config = {
                             {
                                 source: path.resolve(app, 'static', '*'),
                                 destination: dist
+                            },
+                            {
+                                source: path.resolve(__dirname, 'app_settings.json'), // Include app_settings.json from working directory
+                                destination: path.resolve(dist, 'app_settings.json'), // Copy to /server in dist
                             }
                         ],
                     },
