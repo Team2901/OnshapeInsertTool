@@ -57,20 +57,21 @@ export class BaseApp {
 
         // Verify the origin matches the server iframe src query parameter
         if (this.server === e.origin) {
-            // console.log(
-            //     "Message safe and can be handled as it is from origin '" +
-            //         e.origin +
-            //         "', which matches server query parameter '" +
-            //         this.server +
-            //         "'."
-            // );
+            console.log(
+                "Message safe and can be handled as it is from origin '" +
+                    e.origin +
+                    "', which matches server query parameter '" +
+                    this.server +
+                    "'."
+            );
+            console.log(e);
             if (e.data && e.data.messageName) {
-                // console.log("Message name = '" + e.data.messageName + "'");
+                console.log("Message name = '" + e.data.messageName + "'");
             } else {
-                // console.log('Message name not found. Ignoring message.');
+                console.log('Message name not found. Ignoring message.');
             }
         } else {
-            // console.log('Message NOT safe and should be ignored.');
+            console.log('Message NOT safe and should be ignored.');
         }
     }
     /**
