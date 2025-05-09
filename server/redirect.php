@@ -39,19 +39,7 @@ function sanitize($value) {
     return htmlspecialchars(strip_tags(trim($value)));
 }
 
-// Load app settings
-
-
-$appSettings = json_decode(file_get_contents("app_settings.json"), true);
-if (!isset($appSettings['appName'])) {
-    oalog("Invalid configuration: 'appName' key missing in app_settings.json.\n");
-    http_response_code(500);
-    echo "Invalid configuration.";
-    closealog();
-    exit;
-}
-
-$redirectPath = $appSettings['appName'];//"insertwork";// // Use the value from app_settings.json
+$redirectPath = $appname;
 
 $clientId = isset($_GET['client_id']) ? sanitize($_GET['client_id']) : null;
 $documentId = isset($_GET['documentId']) ? sanitize($_GET['documentId']) : null;
@@ -78,5 +66,3 @@ header("Location: $redirectUrl");
 
 // Close the log file
 closealog();
-exit;
-?>

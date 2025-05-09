@@ -27,6 +27,7 @@
  */
 import { BaseApp } from './baseapp';
 import {
+  BTAssemblyInstanceInfo,
     BTDocumentElementInfo,
     BTDocumentSummaryInfo,
     BTESVersionWorkspaceChoice,
@@ -73,7 +74,7 @@ import {
     Preferences,
 } from './preferences';
 import { Library } from './libraries';
-import { appName as APP_NAME } from '../app_settings.json';
+import { appName as APP_NAME } from './app_settings.json';
 import { InformationReporter } from './InformationReporter';
 import { defaults, marked } from 'marked';
 import { TaskProcessingUnit } from './TaskProcessingUnit';
@@ -4250,6 +4251,26 @@ export class App extends BaseApp {
                     },
                 })
                 .then(() => {
+                    // this.onshape.assemblyApi.getAssemblyDefinition({
+                    //     did: documentId,
+                    //     wvm: 'w',
+                    //     wvmid: workspaceId,
+                    //     eid: elementId,
+                    // }).then((def)=>{
+                      // if(def == undefined || !(def?.rootAssembly?.instances))return;
+                      // const instances = def.rootAssembly.instances;
+                      // let insertedInstance: BTAssemblyInstanceInfo;
+                      // //iterate in reverse because recently inserted instances are last
+                      // for(let i = instances.length -1; i >=0; i--){
+                      //   const instance = instances[i];
+                      //   if(instance.documentId == item.documentId && instance.elementId == item.elementId){
+                      //     insertedInstance = instance;
+                      //     break;
+                      //   }
+                      // }
+                      // if(insertedInstance == undefined)return console.warn("Couldn't find inserted instance");
+                      // this.onshape.sendMessage("requestSelectionHighlight",{selection: insertedInstance.id[0]})
+                    // });
                     resolve(insertInfo);
                 })
                 .catch((reason) => {
