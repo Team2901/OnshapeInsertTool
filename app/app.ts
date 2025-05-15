@@ -3244,17 +3244,17 @@ export class App extends BaseApp {
                         if (this.targetDocumentElementInfo.elementType === 'PARTSTUDIO') {
                             this.getInsertChoices(item, 'ASSEMBLY').then((res) => {
                                 if (res.length !== 0) {
-                                    alert(
+                                    this.messaging.showMessageBubble(
                                         `Document: ${item.name} (${item.id}) only contains assembilies, so they cannot be inserted into the active partstudio`
                                     );
                                 } else {
-                                    alert(
+                                    this.messaging.showMessageBubble(
                                         `Nothing is insertable from document: ${item.name} (${item.id})`
                                     );
                                 }
                             });
                         } else {
-                            alert(
+                            this.messaging.showMessageBubble(
                                 `Nothing is insertable from document: ${item.name} (${item.id})`
                             );
                         }
@@ -3845,7 +3845,7 @@ export class App extends BaseApp {
         insertInfo: configInsertInfo
     ): Promise<void> {
         return new Promise((resolve, reject) => {
-            alert(
+            this.messaging.showMessageBubble(
                 `Unable to determine how to insert item ${item.id} - ${item.elementName} into ${this.targetDocumentElementInfo.elementType} ${documentId}/w/${workspaceId}/e/${elementId}`
             );
             resolve();

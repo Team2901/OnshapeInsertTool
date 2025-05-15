@@ -29,6 +29,7 @@
 'use strict';
 
 import { createDocumentElement } from './common/htmldom';
+import { Messaging } from './messaging';
 import { onshapeConfig, OnshapeAPI } from './onshapeapi';
 
 /**
@@ -44,36 +45,9 @@ export class BaseApp {
     public server = 'https://cad.onshape.com';
     public myserver = ''; // Fill in with your server
     public onshape: OnshapeAPI;
+    public messaging: Messaging;
 
     public displayReady: Promise<any>;
-
-    /**
-     * Handle any post messages sent to us
-     * @param e Event message
-     */
-    public handlePostMessage(e: MessageEvent<any>): any {
-        console.log('Post message received in application extension.');
-        console.log('e.origin = ' + e.origin);
-
-        // Verify the origin matches the server iframe src query parameter
-        if (this.server === e.origin) {
-            console.log(
-                "Message safe and can be handled as it is from origin '" +
-                    e.origin +
-                    "', which matches server query parameter '" +
-                    this.server +
-                    "'."
-            );
-            console.log(e);
-            if (e.data && e.data.messageName) {
-                console.log("Message name = '" + e.data.messageName + "'");
-            } else {
-                console.log('Message name not found. Ignoring message.');
-            }
-        } else {
-            console.log('Message NOT safe and should be ignored.');
-        }
-    }
     /**
      * Replace the main app elements.  Note if there is no app div, the elements are appended to the main body so that they aren't lost
      * @param elem Element to replace
@@ -127,61 +101,10 @@ export class BaseApp {
      * @param expires Time when the token expires and needs to be updated
      */
     public initApp() {
-        this.ListenForAppClicks();
-        this.AddPostMessageListener();
-        this.NotifyOnshapeAppInit();
+        this.messaging = new Messaging(this.documentId, this.workspaceId, this.elementId);
         this.startApp();
     }
-    /**
-     * Notify Onshape that we have initialized and are ready to do work
-     * See: https://onshape-public.github.io/docs/clientmessaging/
-     */
-    public NotifyOnshapeAppInit() {
-        let message = {
-            documentId: this.documentId,
-            workspaceId: this.workspaceId,
-            elementId: this.elementId,
-            messageName: 'applicationInit',
-        };
-        // console.log('Posting message: %o', message);
-        window.parent.postMessage(message, 'https://cad.onshape.com');
-    }
-    /**
-     * Add a listener for any post messages from Onshape.  When they come in,
-     * they will be redirected to the handlePostmessage handler.
-     */
-    public AddPostMessageListener() {
-        window.addEventListener(
-            'message',
-            (event: Event) => {
-                this.handlePostMessage(event as MessageEvent<any>);
-            },
-            false
-        );
-    }
-    /**
-     * Listen for clicks in our application and post a message to the Onshape client
-     */
-    public ListenForAppClicks() {
-        const topelement = document.getElementById('top');
-        if (topelement !== null) {
-            topelement.addEventListener(
-                'click',
-                () => {
-                    // console.log('clicked!');
-                    let message = {
-                        documentId: this.documentId,
-                        workspaceId: this.workspaceId,
-                        elementId: this.elementId,
-                        messageName: 'closeFlyoutsAndMenus',
-                    };
-                    // console.log('Posting message: %o', message);
-                    window.parent.postMessage(message, '*');
-                },
-                true
-            );
-        }
-    }
+
     /**
      * Get the contents of a file from Onshape
      * @param url URL of file to get from onshape
