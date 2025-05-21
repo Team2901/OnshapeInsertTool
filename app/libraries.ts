@@ -860,6 +860,7 @@ export class Library extends Preferences {
                         [this.proxyParentFolder]: [folder],
                     });
                     library.resourceType = folder.id;
+                    library['permissionSet'] = folder['permissionSet']
                     console.log(TPU.globalTaskInfo.descendantArray);
                     console.log(TPU.globalTaskInfo.descendantArray.length);
                     console.log((Date.now() - startTime) / 1000);
@@ -1459,10 +1460,11 @@ export class Library extends Preferences {
             isContainer: true,
             projectId: library.id,
             href: parent.id,
+            permissionSet: reference['permissionSet'],
             owner: {
                 id: owner || this.onshape.userId,
             },
-        };
+        } as Object as BTGlobalTreeNodeInfo;
     }
 
     /**

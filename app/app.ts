@@ -1576,6 +1576,7 @@ export class App extends BaseApp {
                         break;
                     }
                 }
+                if(proxyLibrary == undefined && item.jsonType == "proxy-library")proxyLibrary = item;
 
                 if (option.input !== undefined) {
                     inputDiv = document.getElementById(optionId + '_inputdiv');
@@ -1587,12 +1588,9 @@ export class App extends BaseApp {
                     ) as HTMLButtonElement;
                 }
 
-                //makes sure user ownership status is right
+                //makes sure user ownership status and permissions are right
                 if (option.userOwned) {
                     if (
-                        // ((item.owner && item.owner.id) !== this.onshape.userId &&
-                        //     item.createdBy &&
-                        //     item.createdBy.id !== this.onshape.userId) ||
                         proxyLibrary &&
                         proxyLibrary.owner &&
                         proxyLibrary.owner.id !== this.onshape.userId &&
