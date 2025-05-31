@@ -59,6 +59,7 @@ import {
     GetConfigurationWvmEnum,
     GetInsertablesRequest,
     GetWMVEPsMetadataWvmEnum,
+    ItemSuperToJSON,
     ObjectId,
     instanceOfBTPFunctionOrPredicateDeclaration247,
     instanceOfGlobalPermissionInfo,
@@ -170,6 +171,8 @@ export class App extends BaseApp {
         '07986b342f5e967bbfd021f8', //LoonyLib
     ];
 
+    private communityLibraryNode = "accc43e0609b52ab0b86c15f";
+
     public magicInfo: { [item: string]: magicIconInfo } = {
         '0': { icon: 'svg-icon-recentlyOpened', label: 'Recently Opened', search: true },
         '1': { icon: 'svg-icon-myDocuments', label: 'My Onshape' /*, search: true*/ },
@@ -208,9 +211,10 @@ export class App extends BaseApp {
         GL: { icon: 'svg-icon-library-public', label: 'Global Libraries', search: true },
         HI: { icon: 'svg-icon-help-button', label: 'Help/Instructions' },
         CD: { icon: 'svg-icon-document', label: 'Current Document' },
+        CL: { icon: 'svg-icon-team', label: 'Community Library' },
     };
     public homeGrouping: homeGroupInfo[] = [
-        { title: '', children: ['LI', 'FV', 'RI', 'GL', '11', 'HI', 'CD'] },
+        { title: '', children: ['LI', 'FV', 'RI', 'GL', '11', 'HI', 'CD', 'CL'] },
         { title: '━━━━━━━━', children: ['1', '0', '2', '12', '3'] },
         { title: 'Other', children: ['5', '6', '7', '8', '9', '14'] },
     ];
@@ -1211,6 +1215,14 @@ export class App extends BaseApp {
                 rowelem.style.userSelect = 'none';
                 rowelem.classList.remove('os-selectable-item');
                 return;
+            }
+
+            if(item.jsonType === 'notification'){
+                rowelem.style.justifyContent = 'center';
+                rowelem.style.cursor = 'default';
+                rowelem.style.marginTop = '2%';
+                docName.style.textWrap = 'auto'
+                selectable = false;
             }
 
             if (item.jsonType !== 'proxy-folder') {
@@ -4682,6 +4694,7 @@ export class App extends BaseApp {
             this.libraries.getLibrarySearchInfo(id).then((res) => {
                 if (res === undefined) res = [];
                 let items = res as SearchInfoNode[];
+                console.log(`library ${id} has ${items.length} items`)
 
                 const re = new RegExp(match, 'gmi');
                 this.currentSearchItems = (
@@ -4764,6 +4777,16 @@ export class App extends BaseApp {
                 this.checkInsertItem(res, this.loaded, undefined, true, accessId);
             });
     }
+
+    public processCommunityLibraryNode(
+      accessId:string,
+      pathToRoot: BTGlobalTreeMagicNodeInfo[]
+    ){
+      this.gotoFolder({
+        jsonType: "proxy-library",
+        id: this.communityLibraryNode
+      })
+    }
     /**
      * Process a single node entry
      * @param uri URI node for the entries to be loaded
@@ -4830,6 +4853,16 @@ export class App extends BaseApp {
                 },
             ];
             this.processCurrentDocumentNode(accessId, pathToRoot);
+        } else if (magic === 'CL') {
+            pathToRoot = [
+                {
+                    jsonType: 'magic',
+                    resourceType: 'magic',
+                    id: 'CL',
+                    name: 'Community Library',
+                },
+            ];
+            this.processCommunityLibraryNode(accessId, pathToRoot);
         }
 
         if (pathToRoot.length !== 0) return this.setBreadcrumbs(pathToRoot);
@@ -4903,6 +4936,7 @@ export class App extends BaseApp {
                 libraries = this.lastSearchLibraries;
             this.lastSearchLibraries = libraries;
             for (let library of libraries) {
+                console.log(`${library.name} has id ${library.id}`)
                 promises.push(
                     this.processProxyLibrarySearch(
                         library.id,
@@ -5183,7 +5217,7 @@ export class App extends BaseApp {
         subsetConfigurables?: boolean
     ) {
         if (this.validAccessId(accessId) === false) return;
-        // When it does, append all the elements to the UI
+        
         if (
             info &&
             info.items &&
@@ -5195,6 +5229,7 @@ export class App extends BaseApp {
             )
         )
             this.currentNodeInfo = info;
+        // When it does, append all the elements to the UI
         this.appendElements(
             info.items,
             info.pathToRoot[0],
@@ -5336,6 +5371,13 @@ export class App extends BaseApp {
                 .getProxyLibrary(undefined, item.id)
                 .then((res) => {
                     this.addBreadcrumbNode(item);
+                    //add notification for community library, a little hacky but it will work
+                    if(item.id === this.communityLibraryNode){
+                        res.contents.unshift({
+                            jsonType: "notification",
+                            name: "To view document: Right-click > Open document in new tab\n Please email robotics@cghsnc.org to share your open source parts here."
+                        })
+                    }
                     this.ProcessNodeResults(
                         {
                             items: res.contents,
