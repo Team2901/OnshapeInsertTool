@@ -5377,7 +5377,7 @@ export class App extends BaseApp {
                     if(item.id === this.communityLibraryNode){
                         res.contents.unshift({
                             jsonType: "notification",
-                            name: "To view document: Right-click > Open document in new tab\n Please email robotics@cghsnc.org to share your open source parts here."
+                            name: "To view document: Right-click > Open document in new tab.\n Please email robotics@cghsnc.org to share your open source parts here."
                         })
                     }
                     this.ProcessNodeResults(
