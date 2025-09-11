@@ -3026,7 +3026,8 @@ export class App extends BaseApp {
                             elementPartName.indexOf('DO NOT USE PARTS') >= 0 ||
                             elementName.indexOf('DO NOT USE THESE PARTS') >= 0 ||
                             elementName.indexOf('PARTS DO NOT USE') >= 0 ||
-                            elementName.indexOf('DO NOT USE PARTS') >= 0
+                            elementName.indexOf('DO NOT USE PARTS') >= 0 ||
+                            elementName.indexOf('LEGACY ASSEMBLY') >= 0
                         ) {
                             if (
                                 element.parentId !== undefined &&
