@@ -74,3 +74,9 @@ or
 ## Calling Onshape APIs
 
 All of the Onshape APIs are available via `this.onshape`.  Onshape has a [REST API EXPLORER](https://cad.onshape.com/glassworks/explorer/) explorer that you can view all of the calls and search them.  All of the APIs are made available as Typescript interfaces at through [onshape-typescript-fetch](https://github.com/toebes/onshape-typescript-fetch).  You can [find documentation here](https://toebes.github.io/onshape-typescript-fetch/).
+
+## Updating Global Libraries
+
+First add the desired global library to the "My Libraries" node by right clicking on the desired global library and selecting "Add library to My Libraries." 
+Then, parts can be added and moved to the version of the global library in the aforementioned node by right clicking on any part and selecting "Add document to parts library" or "Add document to library folder," however the former puts the document in the root directory.
+The latter of the two choices allows the user to select the proxy-folder that the document is put in, by selecting the desired global library and then a folder (top and bottom dropdown respectively).
