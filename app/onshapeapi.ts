@@ -272,6 +272,26 @@ export class OnshapeAPI {
         return new Promise((resolve, reject) => {
             ExchangeToken(this.myserver + '/oauth.php', redirect_uri, this.code)
                 .then((v: IExchangeToken) => {
+                    if (v.refresh_token === undefined || v.refresh_token === null) {
+                        // we want to cast v as a json type with error and error_description fields to get the error information out of it
+                        const errorResponse = v as unknown as {
+                            error: string;
+                            error_description: string;
+                        };
+                        if (
+                            errorResponse.error === 'invalid_grant' &&
+                            errorResponse.error_description
+                        ) {
+                            reject(
+                                `Unable to authenticate with Onshape. This is likely because the client_id or client_secret is incorrect`
+                            );
+                            return;
+                        }
+                        reject(
+                            `Unable to authenticate with Onshape. This is likely because the extension is not being launched from an Onshape document, or because the redirect URI configured in the Action URL does not match the one being used to launch the app. Please check your configuration and try again. Error details: ${errorResponse.error_description}`
+                        );
+                        return;
+                    }
                     const now = new Date();
                     const expires = new Date(now.getTime() + v.expires_in * 1000);
                     this.initAPIs(v.access_token, v.refresh_token, expires);

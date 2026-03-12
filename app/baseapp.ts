@@ -278,11 +278,18 @@ export class BaseApp {
         this.workspaceId = config.workspaceId;
         // this.server = config.server;
 
-        promises.push(this.onshape.init().then(()=>{
-          this.initApp();
-        }))
+        promises.push(
+            this.onshape
+                .init()
+                .then(() => {
+                    this.initApp();
+                })
+                .catch((reason) => {
+                    this.failApp(reason);
+                })
+        );
 
-        this.displayReady = Promise.all(promises)
+        this.displayReady = Promise.all(promises);
 
         // Promise.all(promises)
         //     .then(() => {
