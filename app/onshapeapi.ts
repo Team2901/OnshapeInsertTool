@@ -305,7 +305,11 @@ export class OnshapeAPI {
             accessToken: (name?: string, scopes?: string[]): Promise<string> => {
                 return this.getAccessToken();
             },
-            headers: { 'X-Server': this.server },
+            headers: {
+                'User-Agent': 'ftconshape/1.0',
+                'X-Server': this.server,
+                'X-SPECIAL-HEADER': 'ONSHAPEAPIPROXY',
+            },
             //header params we want to use on every request
         };
         //
@@ -492,7 +496,9 @@ export class OnshapeAPI {
                 }
             }
         }
-        if(thumbnailId !== undefined && thumbnailId !== null)imageURL = `${this.myserver}/api/thumbnails/${thumbnailId}/s/70x40`;
+        if (thumbnailId !== undefined && thumbnailId !== null) {
+            imageURL = `${this.myserver}/api/thumbnails/${thumbnailId}/s/70x40`;
+        }
         // if (retry) {s
         //     imageURL += '&rejectEmpty=true';
         // }
@@ -503,7 +509,6 @@ export class OnshapeAPI {
             height: String(height),
             id: id,
         }) as HTMLImageElement;
-
 
         this.getThumbnail(imageURL)
             .then((src) => {
