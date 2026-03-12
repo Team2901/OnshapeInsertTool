@@ -1,8 +1,6 @@
-export type{
+export type {};
 
-} 
-
-export interface Selection{
+export interface Selection {
     entityType: string;
     occurencePath: string[];
     selectionID: string;
@@ -10,87 +8,87 @@ export interface Selection{
     workspaceMicroversionId: string;
 }
 
-class Messaging{
-    selections:Selection[];
-    
+class Messaging {
+    selections: Selection[];
+
     documentId: string;
     workspaceId: string;
     elementId: string;
     public server = 'https://cad.onshape.com';
 
-    constructor(documentId: string, workspaceId: string, elementId: string){
+    constructor(documentId: string, workspaceId: string, elementId: string) {
         this.documentId = documentId;
         this.workspaceId = workspaceId;
         this.elementId = elementId;
-        
+
         this.ListenForAppClicks();
         this.AddPostMessageListener();
         this.sendInitMessage();
     }
 
-    showMessageBubble(message:string){
+    showMessageBubble(message: string) {
         let data = {
             documentId: this.documentId,
             workspaceId: this.workspaceId,
             elementId: this.elementId,
             messageName: 'showMessageBubble',
-            message
-        }
+            message,
+        };
 
         window.parent.postMessage(data, '*');
     }
-    
-        /**
-         * Notify Onshape that we have initialized and are ready to do work
-         * See: https://onshape-public.github.io/docs/clientmessaging/
-         */
-        public sendInitMessage() {
-            const message = {
-                documentId: this.documentId,
-                workspaceId: this.workspaceId,
-                elementId: this.elementId,
-                messageName: 'applicationInit',
-            };
 
-            console.log('Posting message: %o', message);
-            window.parent.postMessage(message, '*');
-        }
-        /**
-         * Add a listener for any post messages from Onshape.  When they come in,
-         * they will be redirected to the handlePostmessage handler.
-         */
-        public AddPostMessageListener() {
-            window.addEventListener(
-                'message',
-                (event: Event) => {
-                    this.handlePostMessage(event as MessageEvent<any>);
+    /**
+     * Notify Onshape that we have initialized and are ready to do work
+     * See: https://onshape-public.github.io/docs/clientmessaging/
+     */
+    public sendInitMessage() {
+        const message = {
+            documentId: this.documentId,
+            workspaceId: this.workspaceId,
+            elementId: this.elementId,
+            messageName: 'applicationInit',
+        };
+
+        // console.log('Posting message: %o', message);
+        window.parent.postMessage(message, '*');
+    }
+    /**
+     * Add a listener for any post messages from Onshape.  When they come in,
+     * they will be redirected to the handlePostmessage handler.
+     */
+    public AddPostMessageListener() {
+        window.addEventListener(
+            'message',
+            (event: Event) => {
+                this.handlePostMessage(event as MessageEvent<any>);
+            },
+            false
+        );
+    }
+    /**
+     * Listen for clicks in our application and post a message to the Onshape client
+     */
+    public ListenForAppClicks() {
+        const topelement = document.getElementById('top');
+        if (topelement !== null) {
+            topelement.addEventListener(
+                'click',
+                () => {
+                    // console.log('clicked!');
+                    let message = {
+                        documentId: this.documentId,
+                        workspaceId: this.workspaceId,
+                        elementId: this.elementId,
+                        messageName: 'closeFlyoutsAndMenus',
+                    };
+                    // console.log('Posting message: %o', message);
+                    window.parent.postMessage(message, '*');
                 },
-                false
+                true
             );
         }
-        /**
-         * Listen for clicks in our application and post a message to the Onshape client
-         */
-        public ListenForAppClicks() {
-            const topelement = document.getElementById('top');
-            if (topelement !== null) {
-                topelement.addEventListener(
-                    'click',
-                    () => {
-                        // console.log('clicked!');
-                        let message = {
-                            documentId: this.documentId,
-                            workspaceId: this.workspaceId,
-                            elementId: this.elementId,
-                            messageName: 'closeFlyoutsAndMenus',
-                        };
-                        // console.log('Posting message: %o', message);
-                        window.parent.postMessage(message, '*');
-                    },
-                    true
-                );
-            }
-        }
+    }
     /**
      * Handle any post messages sent to us
      * @param e Event message
@@ -118,4 +116,4 @@ class Messaging{
         }
     }
 }
-export{Messaging}
+export { Messaging };
