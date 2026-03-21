@@ -758,7 +758,7 @@ export class App extends BaseApp {
 
         // Always create a home button to go to the top level list
         const breadcrumbsdiv = createDocumentElement('div', {
-            class: 'os-breadcrumb-container',
+            class: 'breadcrumb-container',
         });
         breadcrumbsdiv.appendChild(
             this.createBreadcrumbNode(
@@ -863,10 +863,10 @@ export class App extends BaseApp {
         onclickFunction: (e: any) => any
     ): HTMLElement {
         const div = createDocumentElement('div', {
-            class: 'os-breadcrumb-node',
+            class: 'breadcrumb-node',
         });
         if (isLast) {
-            div.classList.add('os-breadcrumb-leaf');
+            div.classList.add('breadcrumb-leaf');
         }
         const nodeicon = createSVGIcon(icon);
         nodeicon.onclick = onclickFunction;

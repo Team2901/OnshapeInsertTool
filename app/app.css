@@ -33,6 +33,22 @@ span.defs_only {
   flex: 2
 }
 
+.breadcrumb-container {
+  -webkit-box-align: center;
+  align-items: center;
+  display: flex;
+  overflow: hidden;
+  padding-right: 10px;
+}
+
+.breadcrumb-node {
+  -webkit-box-align: center;
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 5px;
+}
+
 #dump {
   flex: 1
 }
