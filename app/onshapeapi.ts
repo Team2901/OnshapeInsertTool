@@ -107,6 +107,38 @@ export type onshapeConfig = {
  * because everything you will want to override will be in app.ts (or other files you extend it with)
  */
 
+class Blarg implements runtime.Middleware {
+    //Change name later
+    public remaining;
+    public retry;
+    public lastResponseTime;
+  // post?(context: ResponseContext): Promise<Response | void>;
+  // pre?(context: RequestContext): Promise<FetchParams | void>;
+
+    post(context: runtime.ResponseContext): Promise<Response | void> {
+        this.remaining = context.response.headers.get("x-rate-limit-remaining");
+        this.retry = context.response.headers.get("retry-after");
+        this.lastResponseTime = Date.now();
+
+        return new Promise((resolve) => resolve(context.response))
+        //TODO: Is this promise correct?
+    }
+    
+    pre(context: runtime.RequestContext): Promise<runtime.FetchParams | void> {
+        let timeout = 0;
+        if(this.remaining < 50){
+            timeout = 1000
+        }else if(this.remaining < 500){
+            timeout = 100
+        }else if(this.remaining < 1000){
+            timeout = 10
+        }
+        let nextResponseTime = this.lastResponseTime + timeout
+        let sleepTime = nextResponseTime - Date.now()    
+        return new Promise((resolve) => setTimeout(() => resolve(context), sleepTime))
+    }
+}
+
 export class OnshapeAPI {
     public documentId = '';
     public workspaceId = '';
@@ -163,6 +195,7 @@ export class OnshapeAPI {
     public workflowApi: WorkflowApi;
 
     public urlAPI: URLApi;
+    public baseFetchApi: runtime.FetchAPI;
     public configuration: runtime.Configuration;
     public failApp: failAppFunc;
 
@@ -300,6 +333,8 @@ export class OnshapeAPI {
         this.refresh_token = refresh_token;
         this.expires_token = expires;
 
+        
+
         const uriconfigparams: runtime.ConfigurationParameters = {
             basePath: myserver, // override base path
             accessToken: (name?: string, scopes?: string[]): Promise<string> => {
@@ -307,6 +342,7 @@ export class OnshapeAPI {
             },
             headers: { 'X-Server': this.server },
             //header params we want to use on every request
+            middleware: [new Blarg()]
         };
         //
         // For the URLs that get returned from Onshape APIs, we need to
@@ -315,6 +351,8 @@ export class OnshapeAPI {
         // take them as is and pass it straight to the server.
         //
         const urlConfiguration = new runtime.Configuration(uriconfigparams);
+    
+        this.baseFetchApi = urlConfiguration.fetchApi; 
 
         this.urlAPI = new URLApi(urlConfiguration);
 
@@ -656,5 +694,10 @@ export class OnshapeAPI {
             infoFromJSON(jsonValue)
         );
         return await result.value();
+    }
+
+    public async fetchApi(input: RequestInfo | URL, init?: RequestInit) {
+        console.log('hello world')
+       this.baseFetchApi(input, init)
     }
 }
