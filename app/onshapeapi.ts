@@ -109,23 +109,25 @@ export type onshapeConfig = {
 
 class Blarg implements runtime.Middleware {
     //Change name later
-    public remaining;
     public retry;
+    public remaining;
     public lastResponseTime;
   // post?(context: ResponseContext): Promise<Response | void>;
   // pre?(context: RequestContext): Promise<FetchParams | void>;
 
     post(context: runtime.ResponseContext): Promise<Response | void> {
-        this.remaining = context.response.headers.get("x-rate-limit-remaining");
-        this.retry = context.response.headers.get("retry-after");
+        this.remaining = context.response.headers.get("X-Rate-Limit-Remaining");
+        this.retry = context.response.headers.get("Retry-After");
         this.lastResponseTime = Date.now();
 
-        return new Promise((resolve) => resolve(context.response))
-        //TODO: Is this promise correct?
+        return new Promise((resolve) => {
+            resolve(context.response)
+        })
     }
     
     pre(context: runtime.RequestContext): Promise<runtime.FetchParams | void> {
         let timeout = 0;
+
         if(this.remaining < 50){
             timeout = 1000
         }else if(this.remaining < 500){
@@ -133,8 +135,10 @@ class Blarg implements runtime.Middleware {
         }else if(this.remaining < 1000){
             timeout = 10
         }
+
         let nextResponseTime = this.lastResponseTime + timeout
-        let sleepTime = nextResponseTime - Date.now()    
+        let sleepTime = nextResponseTime - Date.now()
+
         return new Promise((resolve) => setTimeout(() => resolve(context), sleepTime))
     }
 }
