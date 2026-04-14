@@ -33,6 +33,30 @@ span.defs_only {
   flex: 2
 }
 
+.breadcrumbs {
+  background-color: #e0deef;
+}
+
+.breadcrumb-container {
+  display: flex; /* flexible row layout */
+  overflow: hidden; /* (I'm guessing on this one) overwrite min-width:auto to allow the desired flex behavior */
+}
+
+.breadcrumb-node {
+  display: flex; /* flexible row layout */
+  min-width: 0px; /* overwrite min-width:auto to allow the desired flex behavior */
+}
+
+.node-title {
+  overflow: hidden; /* cut off the text once out of width */
+  white-space: nowrap; /* keep text as a single row */
+  text-overflow: ellipsis; /* (optional) when text is cut off, show "..." at the end */
+}
+
+.svg-icon {
+  flex-shrink: 0; /* prevent shrinking the icon as the node shrinks */
+}
+
 #dump {
   flex: 1
 }
