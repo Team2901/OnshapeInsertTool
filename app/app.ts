@@ -1338,6 +1338,21 @@ export class App extends BaseApp {
         }
         return container;
     }
+
+    /**
+     * adds text to the inserttool iframe
+     * @param message message to add
+     */
+    public addText(message: string) {
+        const container = this.getFileListContainer();
+        const text = createDocumentElement('div', {
+            textContent: message,
+            id: 'important-message',
+        });
+
+        container.appendChild(text);
+    }
+
     /**
      * Get the element that represents the main container for the application
      * @returns HTMLElement for top of application
@@ -4551,6 +4566,9 @@ export class App extends BaseApp {
                 items: documents,
             };
             this.ProcessNodeResults(recentNode, accessId, undefined, true);
+        }).catch(error => {
+            //todo: finish this
+            this.addText(error);
         });
     }
 

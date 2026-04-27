@@ -77,3 +77,8 @@ span.defs_only {
 .poplocdiv {
   display:none;
 }
+
+#important-message {
+  color: black;
+  font-size: 30px;
+}
