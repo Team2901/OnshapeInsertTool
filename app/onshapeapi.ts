@@ -108,41 +108,47 @@ export type onshapeConfig = {
  */
 
 class Blarg implements runtime.Middleware {
-    //Change name later
-    public retry;
-    public remaining;
-    public lastResponseTime;
-  // post?(context: ResponseContext): Promise<Response | void>;
-  // pre?(context: RequestContext): Promise<FetchParams | void>;
+    public retry = 0;
+    public remaining = 0;
+    public lastResponseTime = 0;
 
-    post(context: runtime.ResponseContext): Promise<Response | void> {
-        this.remaining = context.response.headers.get("X-Rate-Limit-Remaining");
-        this.retry = context.response.headers.get("Retry-After");
+    async post(context: runtime.ResponseContext) {
+        this.remaining = Number(
+            context.response.headers.get('X-Rate-Limit-Remaining') ?? 0
+        );
+
+        this.retry = Number(context.response.headers.get('Retry-After') ?? 0);
+
+        console.log(
+            `Response received. Remaining: ${this.remaining}, Retry: ${this.retry}`
+        );
         this.lastResponseTime = Date.now();
 
-        return new Promise((resolve) => {
-            resolve(context.response)
-        })
+        return context.response;
     }
-    
-    pre(context: runtime.RequestContext): Promise<runtime.FetchParams | void> {
+
+    async pre(context: runtime.RequestContext) {
         let timeout = 0;
 
-        if(this.remaining < 50){
-            timeout = 1000
-        }else if(this.remaining < 500){
-            timeout = 100
-        }else if(this.remaining < 1000){
-            timeout = 10
+        if (this.remaining < 50) timeout = 15000;
+        else if (this.remaining < 75) timeout = 10000;
+        else if (this.remaining < 100) timeout = 5000;
+        else if (this.remaining < 300) timeout = 2000;
+        else if (this.remaining < 500) timeout = 1000;
+        else if (this.remaining < 750) timeout = 100;
+        else if (this.remaining < 1000) timeout = 10;
+
+        const sleepTime = Math.max(0, this.lastResponseTime + timeout - Date.now());
+
+        // console.log(`Sleeping for ${sleepTime}ms`);
+
+        if (sleepTime > 0) {
+            await new Promise((r) => setTimeout(r, sleepTime));
         }
 
-        let nextResponseTime = this.lastResponseTime + timeout
-        let sleepTime = nextResponseTime - Date.now()
-
-        return new Promise((resolve) => setTimeout(() => resolve(context), sleepTime))
+        return context;
     }
 }
-
 export class OnshapeAPI {
     public documentId = '';
     public workspaceId = '';
@@ -337,8 +343,6 @@ export class OnshapeAPI {
         this.refresh_token = refresh_token;
         this.expires_token = expires;
 
-        
-
         const uriconfigparams: runtime.ConfigurationParameters = {
             basePath: myserver, // override base path
             accessToken: (name?: string, scopes?: string[]): Promise<string> => {
@@ -346,7 +350,7 @@ export class OnshapeAPI {
             },
             headers: { 'X-Server': this.server },
             //header params we want to use on every request
-            middleware: [new Blarg()]
+            middleware: [new Blarg()],
         };
         //
         // For the URLs that get returned from Onshape APIs, we need to
@@ -355,8 +359,8 @@ export class OnshapeAPI {
         // take them as is and pass it straight to the server.
         //
         const urlConfiguration = new runtime.Configuration(uriconfigparams);
-    
-        this.baseFetchApi = urlConfiguration.fetchApi; 
+
+        this.baseFetchApi = urlConfiguration.fetchApi;
 
         this.urlAPI = new URLApi(urlConfiguration);
 
@@ -534,7 +538,8 @@ export class OnshapeAPI {
                 }
             }
         }
-        if(thumbnailId !== undefined && thumbnailId !== null)imageURL = `${this.myserver}/api/thumbnails/${thumbnailId}/s/70x40`;
+        if (thumbnailId !== undefined && thumbnailId !== null)
+            imageURL = `${this.myserver}/api/thumbnails/${thumbnailId}/s/70x40`;
         // if (retry) {s
         //     imageURL += '&rejectEmpty=true';
         // }
@@ -545,7 +550,6 @@ export class OnshapeAPI {
             height: String(height),
             id: id,
         }) as HTMLImageElement;
-
 
         this.getThumbnail(imageURL)
             .then((src) => {
@@ -701,7 +705,7 @@ export class OnshapeAPI {
     }
 
     public async fetchApi(input: RequestInfo | URL, init?: RequestInit) {
-        console.log('hello world')
-       this.baseFetchApi(input, init)
+        console.log('hello world');
+        this.baseFetchApi(input, init);
     }
 }
