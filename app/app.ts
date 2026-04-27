@@ -27,7 +27,7 @@
  */
 import { BaseApp } from './baseapp';
 import {
-  BTAssemblyInstanceInfo,
+    BTAssemblyInstanceInfo,
     BTDocumentElementInfo,
     BTDocumentSummaryInfo,
     BTESVersionWorkspaceChoice,
@@ -171,7 +171,7 @@ export class App extends BaseApp {
         '07986b342f5e967bbfd021f8', //LoonyLib
     ];
 
-    private communityLibraryNode = "accc43e0609b52ab0b86c15f";
+    private communityLibraryNode = 'accc43e0609b52ab0b86c15f';
 
     public magicInfo: { [item: string]: magicIconInfo } = {
         '0': { icon: 'svg-icon-recentlyOpened', label: 'Recently Opened', search: true },
@@ -758,7 +758,7 @@ export class App extends BaseApp {
 
         // Always create a home button to go to the top level list
         const breadcrumbsdiv = createDocumentElement('div', {
-            class: 'os-breadcrumb-container',
+            class: 'breadcrumb-container',
         });
         breadcrumbsdiv.appendChild(
             this.createBreadcrumbNode(
@@ -863,10 +863,10 @@ export class App extends BaseApp {
         onclickFunction: (e: any) => any
     ): HTMLElement {
         const div = createDocumentElement('div', {
-            class: 'os-breadcrumb-node',
+            class: 'breadcrumb-node',
         });
         if (isLast) {
-            div.classList.add('os-breadcrumb-leaf');
+            div.classList.add('breadcrumb-leaf');
         }
         const nodeicon = createSVGIcon(icon);
         nodeicon.onclick = onclickFunction;
@@ -1217,11 +1217,11 @@ export class App extends BaseApp {
                 return;
             }
 
-            if(item.jsonType === 'notification'){
+            if (item.jsonType === 'notification') {
                 rowelem.style.justifyContent = 'center';
                 rowelem.style.cursor = 'default';
                 rowelem.style.marginTop = '2%';
-                docName.style.textWrap = 'auto'
+                docName.style.textWrap = 'auto';
                 selectable = false;
             }
 
@@ -1240,6 +1240,7 @@ export class App extends BaseApp {
                     );
                 };
             }
+            // console.log(`Setting ${item.name} selectable=${selectable}`);
             if (selectable) {
                 rowelem.oncontextmenu = (event) => {
                     event.preventDefault();
@@ -1561,6 +1562,7 @@ export class App extends BaseApp {
     ): void {
         const actionMenu = document.getElementById('docactionmenu');
         if (actionMenu != undefined) {
+            // console.log('Showing action menu');
             // TODO: Same as popup, Move actionMenu above item if it doesn't fit below
             const actionMenuWidth = Math.max(300, rect.width);
             actionMenu.style.left = String(rect.left) + 'px';
@@ -1603,7 +1605,9 @@ export class App extends BaseApp {
                         break;
                     }
                 }
-                if(proxyLibrary == undefined && item.jsonType == "proxy-library")proxyLibrary = item;
+                if (proxyLibrary == undefined && item.jsonType == 'proxy-library') {
+                    proxyLibrary = item;
+                }
 
                 if (option.input !== undefined) {
                     inputDiv = document.getElementById(optionId + '_inputdiv');
@@ -1629,6 +1633,7 @@ export class App extends BaseApp {
                             ) != -1
                         )
                     ) {
+                        // console.log(option.name + ' hidden due to user ownership');
                         optionElement.parentElement.style.display = 'none';
                         continue;
                     }
@@ -1637,6 +1642,7 @@ export class App extends BaseApp {
                 if (backgroundMenu) {
                     item = parentNode;
                     if (option.parentWithoutDocument === undefined) {
+                        // console.log(option.name + ' ParentWithoutDocument');
                         optionElement.parentElement.style.display = 'none';
                         continue;
                     } else if (option.parentWithoutDocument[0] !== 'any') {
@@ -1650,6 +1656,7 @@ export class App extends BaseApp {
                                 correctPlacement = true;
                         });
                         if (!correctPlacement) {
+                            // console.log(option.name + ' not correct placement');
                             optionElement.parentElement.style.display = 'none';
                             continue;
                         }
@@ -1666,6 +1673,7 @@ export class App extends BaseApp {
                                 correctPlacement = true;
                         });
                         if (!correctPlacement) {
+                            // console.log(option.name + ' not correct placement2');
                             optionElement.parentElement.style.display = 'none';
                             continue;
                         }
@@ -1682,6 +1690,7 @@ export class App extends BaseApp {
                                 correctPlacement = false;
                         });
                         if (!correctPlacement) {
+                            // console.log(option.name + ' not correct placement3');
                             optionElement.parentElement.style.display = 'none';
                             continue;
                         }
@@ -1699,6 +1708,7 @@ export class App extends BaseApp {
                                 correctPlacement = true;
                         });
                         if (!correctPlacement) {
+                            // console.log(option.name + ' not correct placement4');
                             optionElement.parentElement.style.display = 'none';
                             continue;
                         }
@@ -4031,7 +4041,9 @@ export class App extends BaseApp {
                 );
             } else {
                 promise = new Promise<configInsertInfo>((resolve) => resolve(undefined));
-                console.warn('insert element not handled');
+                console.warn(
+                    `insert element not handled elementType=${item.elementType} targetElementType=${this.targetDocumentElementInfo.elementType}`
+                );
                 return;
             }
 
@@ -4282,19 +4294,19 @@ export class App extends BaseApp {
                     //     wvmid: workspaceId,
                     //     eid: elementId,
                     // }).then((def)=>{
-                      // if(def == undefined || !(def?.rootAssembly?.instances))return;
-                      // const instances = def.rootAssembly.instances;
-                      // let insertedInstance: BTAssemblyInstanceInfo;
-                      // //iterate in reverse because recently inserted instances are last
-                      // for(let i = instances.length -1; i >=0; i--){
-                      //   const instance = instances[i];
-                      //   if(instance.documentId == item.documentId && instance.elementId == item.elementId){
-                      //     insertedInstance = instance;
-                      //     break;
-                      //   }
-                      // }
-                      // if(insertedInstance == undefined)return console.warn("Couldn't find inserted instance");
-                      // this.onshape.sendMessage("requestSelectionHighlight",{selection: insertedInstance.id[0]})
+                    // if(def == undefined || !(def?.rootAssembly?.instances))return;
+                    // const instances = def.rootAssembly.instances;
+                    // let insertedInstance: BTAssemblyInstanceInfo;
+                    // //iterate in reverse because recently inserted instances are last
+                    // for(let i = instances.length -1; i >=0; i--){
+                    //   const instance = instances[i];
+                    //   if(instance.documentId == item.documentId && instance.elementId == item.elementId){
+                    //     insertedInstance = instance;
+                    //     break;
+                    //   }
+                    // }
+                    // if(insertedInstance == undefined)return console.warn("Couldn't find inserted instance");
+                    // this.onshape.sendMessage("requestSelectionHighlight",{selection: insertedInstance.id[0]})
                     // });
                     resolve(insertInfo);
                 })
@@ -4712,7 +4724,7 @@ export class App extends BaseApp {
             this.libraries.getLibrarySearchInfo(id).then((res) => {
                 if (res === undefined) res = [];
                 let items = res as SearchInfoNode[];
-                console.log(`library ${id} has ${items.length} items`)
+                console.log(`library ${id} has ${items.length} items`);
 
                 const re = new RegExp(match, 'gmi');
                 this.currentSearchItems = (
@@ -4797,13 +4809,13 @@ export class App extends BaseApp {
     }
 
     public processCommunityLibraryNode(
-      accessId:string,
-      pathToRoot: BTGlobalTreeMagicNodeInfo[]
-    ){
-      this.gotoFolder({
-        jsonType: "proxy-library",
-        id: this.communityLibraryNode
-      })
+        accessId: string,
+        pathToRoot: BTGlobalTreeMagicNodeInfo[]
+    ) {
+        this.gotoFolder({
+            jsonType: 'proxy-library',
+            id: this.communityLibraryNode,
+        });
     }
     /**
      * Process a single node entry
@@ -4954,7 +4966,7 @@ export class App extends BaseApp {
                 libraries = this.lastSearchLibraries;
             this.lastSearchLibraries = libraries;
             for (let library of libraries) {
-                console.log(`${library.name} has id ${library.id}`)
+                console.log(`${library.name} has id ${library.id}`);
                 promises.push(
                     this.processProxyLibrarySearch(
                         library.id,
@@ -5235,7 +5247,7 @@ export class App extends BaseApp {
         subsetConfigurables?: boolean
     ) {
         if (this.validAccessId(accessId) === false) return;
-        
+
         if (
             info &&
             info.items &&
@@ -5390,11 +5402,11 @@ export class App extends BaseApp {
                 .then((res) => {
                     this.addBreadcrumbNode(item);
                     //add notification for community library, a little hacky but it will work
-                    if(item.id === this.communityLibraryNode){
+                    if (item.id === this.communityLibraryNode) {
                         res.contents.unshift({
-                            jsonType: "notification",
-                            name: "To view document: Right-click > Open document in new tab.\n Please email robotics@cghsnc.org to share your open source parts here."
-                        })
+                            jsonType: 'notification',
+                            name: 'To view document: Right-click > Open document in new tab.\n Please email robotics@cghsnc.org to share your open source parts here.',
+                        });
                     }
                     this.ProcessNodeResults(
                         {
