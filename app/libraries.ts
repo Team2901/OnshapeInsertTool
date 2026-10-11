@@ -23,6 +23,7 @@ interface deltaInfo {
 }
 
 export class Library extends Preferences {
+    public browseRevision = 0;
     proxyChildrenName = SPECIALCHAR + 'children' + SPECIALCHAR;
     proxyDescendantName = SPECIALCHAR + 'descendant' + SPECIALCHAR;
     proxyParentFolder = SPECIALCHAR + 'parentfolder' + SPECIALCHAR;
@@ -1368,6 +1369,7 @@ export class Library extends Preferences {
         library?: BTGlobalTreeNodeInfo,
         libraryId?: string
     ): Promise<boolean> {
+        this.browseRevision++;
         return new Promise((resolve, reject) => {
             if (library === undefined && libraryId === undefined)
                 return reject('Either library or libraryId must be passed in.');
@@ -1381,6 +1383,7 @@ export class Library extends Preferences {
                 this.getAppElement(this.searchInfoName, library).then((res) => {
                     if (res === undefined) resolve(undefined);
                     this.setBTGArray(library, 'all', info).then((res2) => {
+                        this.browseRevision++;
                         resolve(res2);
                     });
                 });
@@ -1557,11 +1560,13 @@ export class Library extends Preferences {
         library: BTGlobalTreeNodeInfo,
         entries: Array<BTGlobalTreeNodeInfo>
     ): Promise<boolean> {
+        this.browseRevision++;
         // console.log('library set to : ', entries);
         return new Promise((resolve, _reject) => {
             // console.log('-ElementID-', library['elementId']);
             // console.log('_______');
             this.setBTGArray(library, this.proxyChildrenName, entries).then((res) => {
+                this.browseRevision++;
                 resolve(res);
             });
         });
@@ -1754,6 +1759,7 @@ export class Library extends Preferences {
         folder: BTGlobalTreeNodeInfo,
         entries: Array<BTGlobalTreeNodeInfo>
     ): Promise<boolean> {
+        this.browseRevision++;
         return new Promise((resolve, _reject) => {
             library = Object.assign({}, library);
             this.getAppElement(folder.id, library)
@@ -1767,6 +1773,7 @@ export class Library extends Preferences {
                     // );
                     this.setBTGArray(folderElement, this.proxyChildrenName, entries).then(
                         (res) => {
+                            this.browseRevision++;
                             resolve(res);
                         }
                     );
