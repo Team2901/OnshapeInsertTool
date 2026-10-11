@@ -517,13 +517,8 @@ export class App extends BaseApp {
             .initUserPreferences(this.appName)
             .then((_val) => {
                 if (_val === undefined || _val === null) {
-                    if (this.onshape.freeUser) {
-                        return this.startAppContent();
-                    } else {
-                        console.error(
-                            'Cannot create initialize user preferences. They are not a free user'
-                        );
-                    }
+                    this.failApp('Unable to initialize preferences. Reload to retry.');
+                    return;
                 }
 
                 this.startAppPreferences()

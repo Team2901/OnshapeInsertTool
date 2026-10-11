@@ -114,39 +114,84 @@ export class Preferences {
         this.onshape = onshape;
     }
 
-    /**
-     * Initialize the preferences API for an application named 'appName'
-     */
-    public initUserPreferences(appName: string): Promise<BTGlobalTreeProxyInfo> {
-        // matches the app name.
+    private localPreferencesKey: string;
+    private localPreferences: { [key: string]: any };
+
+    private validPreferencesLocation(info: BTGlobalTreeProxyInfo): boolean {
+        return !!(info && info.id && info.wvmid && info.elementId);
+    }
+
+    private useLocalPreferences(appName: string, key: string): BTGlobalTreeProxyInfo {
+        this.localPreferencesKey = key;
+        let stored: string;
+        try { stored = localStorage.getItem(key); } catch { /* Session-only fallback. */ }
+        try { this.localPreferences = JSON.parse(stored); } catch { /* Start empty. */ }
+        if (!this.localPreferences || typeof this.localPreferences !== 'object' || Array.isArray(this.localPreferences))
+            this.localPreferences = { appName };
+        this.userPreferencesInfo = { jsonType: 'local-preferences' };
+        this.onshape.freeUser = true;
+        console.info('Preferences are stored in this browser because private preferences documents are unavailable.');
+        return this.userPreferencesInfo;
+    }
+
+    /** Initialize remote preferences, or local preferences for the free-account restriction. */
+    public async initUserPreferences(appName: string): Promise<BTGlobalTreeProxyInfo> {
         this.newUser = false;
-        return new Promise((resolve, _reject) => {
-            const prefStore = localStorage.getItem(this.preferenceFileName);
-            if (prefStore != undefined) {
-                this.userPreferencesInfo = JSON.parse(prefStore);
-                return resolve(this.userPreferencesInfo);
+        this.localPreferencesKey = undefined;
+        this.localPreferences = undefined;
+        this.userPreferencesInfo = undefined;
+        const scope = JSON.stringify([this.onshape.server, this.onshape.userId, appName]);
+        const cacheKey = 'insert-tool:preferences-location:' + scope;
+        const localKey = 'insert-tool:local-preferences:' + scope;
+        let cached: BTGlobalTreeProxyInfo;
+        try {
+            if (localStorage.getItem(localKey) !== null) return this.useLocalPreferences(appName, localKey);
+            cached = JSON.parse(localStorage.getItem(cacheKey));
+        } catch { /* Invalid or unavailable storage must not prevent initialization. */ }
+        if (this.validPreferencesLocation(cached)) {
+            this.userPreferencesInfo = cached;
+            return cached;
+        }
+        try {
+            const document = await this.getPreferencesDoc();
+            if (!document) return undefined;
+            const info = await this.getAppElement(appName, document);
+            if (!this.validPreferencesLocation(info)) throw new Error('Preferences location is incomplete');
+            this.userPreferencesInfo = info;
+            try { localStorage.setItem(cacheKey, JSON.stringify(info)); } catch { /* Remote storage still works. */ }
+            return info;
+        } catch (error) {
+            // Only the observed account restriction warrants local fallback.
+            // Authentication, permission and network errors must remain failures.
+            if (error?.response?.status === 409) {
+                try {
+                    const body = await error.response.clone().json();
+                    if (typeof body.message === 'string' &&
+                        body.message.includes('Free accounts only allow access to public documents'))
+                        return this.useLocalPreferences(appName, localKey);
+                } catch { /* Unrecognized response: report initialization failure. */ }
             }
-            this.getPreferencesDoc()
-                .then((res) => {
-                    if (res === undefined) return resolve(undefined);
-                    this.getAppElement(appName, this.userPreferencesInfo)
-                        .then((res) => {
-                            localStorage.setItem(
-                                this.preferenceFileName,
-                                JSON.stringify(res)
-                            );
-                            resolve(this.userPreferencesInfo);
-                        })
-                        .catch((err) => {
-                            console.log(err);
-                            resolve(undefined);
-                        });
-                })
-                .catch((err) => {
-                    console.log(err);
-                    resolve(undefined);
-                });
-        });
+            console.warn('Unable to initialize preferences');
+            return undefined;
+        }
+    }
+
+    private async saveAppJson(libInfo: BTGlobalTreeProxyInfo, value: JSON): Promise<boolean> {
+        if (this.localPreferencesKey && libInfo === this.userPreferencesInfo) {
+            this.localPreferences = JSON.parse(JSON.stringify(value));
+            try { localStorage.setItem(this.localPreferencesKey, JSON.stringify(value)); return true; }
+            catch { return false; } // Retain the session copy without claiming durable storage.
+        }
+        if (!this.validPreferencesLocation(libInfo)) return false;
+        try {
+            await this.onshape.blobElementApi.uploadFileUpdateElement({
+                encodedFilename: value['appName'], did: libInfo.id,
+                wid: libInfo.wvmid, eid: libInfo.elementId,
+                // The generated client expects Blob but serializes JSON strings correctly.
+                file: JSON.stringify(value) as unknown as Blob,
+            });
+            return true;
+        } catch { return false; }
     }
 
     /**
@@ -175,40 +220,18 @@ export class Preferences {
      * @param name Name of element to set
      * @param element Value to be stored into element
      */
-    public setCustom(
+    public async setCustom(
         name: string,
         element: any,
         libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
     ): Promise<boolean> {
-        return new Promise((resolve, _reject) => {
-            this.getAppJson(libInfo)
-                .then((res) => {
-                    res[name] = element;
-                    this.onshape.blobElementApi
-                        .uploadFileUpdateElement({
-                            encodedFilename: res['appName'],
-                            did: libInfo.id,
-                            wid: libInfo.wvmid,
-                            eid: libInfo.elementId,
-
-                            // HACK The API expects a Blob type, however if you pass it a blob it formats
-                            // and POSTs it as a binary file no matter what. This needs to be passed as a string for
-                            // the needs of the Preferences API.
-                            file: JSON.stringify(res) as unknown as Blob,
-                        })
-                        .then((res2) => {
-                            resolve(true);
-                        })
-                        .catch((err) => {
-                            resolve(false);
-                        });
-
-                    resolve(true);
-                })
-                .catch((err) => {
-                    resolve(false);
-                });
-        });
+        if (this.localPreferencesKey && libInfo === this.userPreferencesInfo)
+            return this.saveAppJson(libInfo, { ...this.localPreferences, [name]: element } as unknown as JSON);
+        try {
+            const value = await this.getAppJson(libInfo);
+            value[name] = element;
+            return this.saveAppJson(libInfo, value);
+        } catch { return false; }
     }
 
     /**
@@ -225,7 +248,7 @@ export class Preferences {
         return new Promise((resolve, _reject) => {
             this.getAppJson(libInfo)
                 .then((res) => {
-                    resolve(res[name]);
+                    resolve(res[name] === undefined ? default_val : res[name]);
                 })
                 .catch((err) => {
                     console.log(err);
@@ -281,44 +304,24 @@ export class Preferences {
      * Add an item to the list of the magicNodes type associated with the application.  Note that it only stores the limit amount if input
      * @param item Item to add to the insert list
      */
-    public addMagicNode(
+    public async addMagicNode(
         item: BTGlobalTreeNodeMagicDataInfo,
         magicType: string,
         libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo,
         limit?: number
     ): Promise<boolean> {
-        return new Promise((resolve, _reject) => {
-            // if (this.freeUser) return resolve(false);
-            const BTGType = this.magicTypeToBTGType[magicType];
-            this.getAllOfMagicType(magicType).then((nodes: BTGlobalTreeNodeInfo[]) => {
-                const newNodes: BTGlobalTreeNodeInfo[] = [];
-                let node: BTGlobalTreeNodeMagicDataInfo;
-                let duplicate: BTGlobalTreeNodeMagicDataInfo;
-                //Iterate nodes and don't add duplicates to new list
-                nodes.unshift(item);
-                for (let i in nodes) {
-                    node = nodes[i];
-                    duplicate = newNodes.find(
-                        (element: BTGlobalTreeNodeMagicDataInfo) => {
-                            return (
-                                element.id === node.id &&
-                                element.configuration === node.configuration
-                            );
-                        }
-                    );
-                    if (duplicate === undefined) newNodes.push(node);
-                }
-                if (
-                    limit !== undefined &&
-                    limit !== null &&
-                    limit > 0 &&
-                    nodes.length >= limit
-                )
-                    newNodes.pop();
-                this.setBTGArray(libInfo, BTGType, newNodes);
-            });
-            resolve(false);
-        });
+        const type = this.magicTypeToBTGType[magicType];
+        if (!type) return false;
+        const nodes = this.localPreferencesKey && libInfo === this.userPreferencesInfo
+            ? (this.localPreferences[type] || [])
+            : await this.getAllOfMagicType(magicType, libInfo);
+        const result: BTGlobalTreeNodeMagicDataInfo[] = [];
+        for (const node of [item, ...nodes] as BTGlobalTreeNodeMagicDataInfo[]) {
+            if (!result.some(existing => existing.id === node.id && existing.configuration === node.configuration))
+                result.push(node);
+        }
+        if (limit > 0) result.splice(limit);
+        return this.setBTGArray(libInfo, type, result);
     }
 
     /**
@@ -501,37 +504,14 @@ export class Preferences {
         } else {
             info = param2;
         }
-        return new Promise((resolve, _reject) => {
-            // if (this.freeUser) return resolve(false);
-            this.getAppJson(libInfo)
-                .then((res) => {
-                    let pref_name: string;
-                    for (pref_name in info) {
-                        res[pref_name] = info[pref_name];
-                    }
-                    this.onshape.blobElementApi
-                        .uploadFileUpdateElement({
-                            encodedFilename: res['appName'],
-                            did: libInfo.id,
-                            wid: libInfo.wvmid,
-                            eid: libInfo.elementId,
-
-                            // HACK The API expects a Blob type, however if you pass it a blob it formats
-                            // and POSTs it as a binary file no matter what. This needs to be passed as a string for
-                            // the needs of the Preferences API.
-                            file: JSON.stringify(res) as unknown as Blob,
-                        })
-                        .then((res) => {
-                            resolve(true);
-                        })
-                        .catch((err) => {
-                            resolve(false);
-                        });
-                })
-                .catch((err) => {
-                    resolve(false);
-                });
-        });
+        if (this.localPreferencesKey && libInfo === this.userPreferencesInfo)
+            return this.saveAppJson(libInfo, { ...this.localPreferences, ...info } as unknown as JSON);
+        return this.getAppJson(libInfo)
+            .then(value => {
+                for (const name in info) value[name] = info[name];
+                return this.saveAppJson(libInfo, value);
+            })
+            .catch(() => false);
     }
 
     public getBTGArray(
@@ -591,9 +571,11 @@ export class Preferences {
      * @param libinfo The BTGTree containing info about which blob element to pull from./
      */
     public getAppJson(libInfo: BTGlobalTreeProxyInfo): Promise<JSON> {
-        return new Promise((resolve, _reject) => {
-            if (libInfo.wvmid === undefined || libInfo.wvmid === null)
-                return console.error('NO WVMID', libInfo);
+        if (this.localPreferencesKey && libInfo === this.userPreferencesInfo)
+            return Promise.resolve(JSON.parse(JSON.stringify(this.localPreferences)));
+        if (!this.validPreferencesLocation(libInfo))
+            return Promise.reject(new Error('Preferences location is unavailable'));
+        return new Promise((resolve, reject) => {
             this.onshape.blobElementApi
                 .downloadFileWorkspace({
                     did: libInfo.id,
@@ -605,8 +587,7 @@ export class Preferences {
                     resolve(resJson);
                 })
                 .catch((err) => {
-                    console.warn(err);
-                    resolve({} as JSON);
+                    reject(err);
                 });
         });
     }
@@ -805,7 +786,7 @@ export class Preferences {
                             reject(err);
                         });
                 }
-            });
+            }).catch(reject);
         });
     }
 

@@ -41,6 +41,22 @@ If you have done everything right, when you add the application to your account,
 
 To make change to the application, edit the `app/app.ts` file.  It is built on top of the `app/baseapp.ts` file which has all the common routines.
 
+## Preferences storage
+
+Preferences normally live in a Blob element in an Onshape preferences document.
+If Onshape rejects creation because a free account cannot use private documents,
+the app stores preferences in browser local storage instead. This includes favorites,
+Recently Inserted, custom settings, and the last browsing location. It does not
+create a public preferences document as a fallback. Existing Onshape preferences
+documents remain supported.
+
+Local preferences stay in the current browser profile and app origin, scoped to
+the app name and user ID when Onshape supplies one; they do not sync between
+browsers. Clearing site data removes them. If browser storage is unavailable,
+preferences remain available for the current session, but saves report failure.
+Other initialization errors stop startup with a retry message instead of continuing
+with an invalid preferences location.
+
 ## API rate limiting
 
 The app tracks `X-Rate-Limit-Remaining` separately for each API operation, sharing
