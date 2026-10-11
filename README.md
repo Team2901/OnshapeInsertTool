@@ -41,6 +41,16 @@ If you have done everything right, when you add the application to your account,
 
 To make change to the application, edit the `app/app.ts` file.  It is built on top of the `app/baseapp.ts` file which has all the common routines.
 
+## API rate limiting
+
+The app tracks `X-Rate-Limit-Remaining` separately for each API operation, sharing
+the cooldown across document IDs and query configurations. A low quota on a
+library read does not delay an assembly insertion. Calls to the affected operation
+retain the existing conservative pacing and honor `Retry-After` when supplied.
+The app does not automatically replay failed writes.
+
+Run `npm test` to validate rate limiting and browsing behavior.
+
 ## PHP API proxy responses
 
 The PHP API proxy forwards response body chunks as cURL receives them instead of

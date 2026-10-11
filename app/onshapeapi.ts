@@ -75,6 +75,7 @@ import {
 } from 'onshape-typescript-fetch';
 import { createDocumentElement } from './common/htmldom';
 import { RequestCache } from './common/requestcache';
+import { RateLimitMiddleware } from './common/ratelimit';
 
 // Optional parameters when creating a thumbnail
 type createThumbnailOptions = {
@@ -109,48 +110,6 @@ export type onshapeConfig = {
  * because everything you will want to override will be in app.ts (or other files you extend it with)
  */
 
-class Blarg implements runtime.Middleware {
-    public retry = 0;
-    public remaining = 0;
-    public lastResponseTime = 0;
-
-    async post(context: runtime.ResponseContext) {
-        this.remaining = Number(
-            context.response.headers.get('X-Rate-Limit-Remaining') ?? 0
-        );
-
-        this.retry = Number(context.response.headers.get('Retry-After') ?? 0);
-
-        console.log(
-            `Response received. Remaining: ${this.remaining}, Retry: ${this.retry}`
-        );
-        this.lastResponseTime = Date.now();
-
-        return context.response;
-    }
-
-    async pre(context: runtime.RequestContext) {
-        let timeout = 0;
-
-        if (this.remaining < 50) timeout = 15000;
-        else if (this.remaining < 75) timeout = 10000;
-        else if (this.remaining < 100) timeout = 5000;
-        else if (this.remaining < 300) timeout = 2000;
-        else if (this.remaining < 500) timeout = 1000;
-        else if (this.remaining < 750) timeout = 100;
-        else if (this.remaining < 1000) timeout = 10;
-
-        const sleepTime = Math.max(0, this.lastResponseTime + timeout - Date.now());
-
-        // console.log(`Sleeping for ${sleepTime}ms`);
-
-        if (sleepTime > 0) {
-            await new Promise((r) => setTimeout(r, sleepTime));
-        }
-
-        return context;
-    }
-}
 export class OnshapeAPI {
     private thumbnailCache = new RequestCache<string>(60000, 100);
     private pendingThumbnails = new Map<Element, () => void>();
@@ -404,7 +363,7 @@ export class OnshapeAPI {
                 'X-SPECIAL-HEADER': 'ONSHAPEAPIPROXY',
             },
             //header params we want to use on every request
-            middleware: [new Blarg()],
+            middleware: [new RateLimitMiddleware()],
         };
         //
         // For the URLs that get returned from Onshape APIs, we need to
