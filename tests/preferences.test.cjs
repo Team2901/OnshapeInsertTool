@@ -4,6 +4,12 @@ const vm = require('node:vm');
 const ts = require('typescript');
 const { test } = require('node:test');
 
+// Use the real token helper: it returns the complete Authorization header, including Bearer.
+const apiExports = {};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync(require.resolve('../app/onshapeapi.ts'), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2018 },
+}).outputText, { exports: apiExports, require: () => ({}) });
+
 function harness(storage = new Map(), options = {}) {
     const exports = {};
     const code = ts.transpileModule(fs.readFileSync(require.resolve('../app/preferences.ts'), 'utf8'), {
@@ -22,7 +28,8 @@ function harness(storage = new Map(), options = {}) {
     const calls = { create: 0, writes: [], reads: 0 };
     const restriction = { response: new Response(JSON.stringify({ message: 'Free accounts only allow access to public documents. Upgrade your account to get full access to private documents.' }), { status: 409 }) };
     const onshape = { server: 'https://cad.onshape.com', userId: options.user || 'user', freeUser: false,
-        getAccessToken: async () => 'test-access-token',
+        getAccessToken: apiExports.OnshapeAPI.prototype.getAccessToken,
+        access_token: 'test-access-token', expires_token: new Date(Date.now() + 60000),
         userApi: { sessionInfo: async (init) => {
             assert.equal(init.headers.Authorization, 'Bearer test-access-token');
             calls.identityAuthenticated = true;

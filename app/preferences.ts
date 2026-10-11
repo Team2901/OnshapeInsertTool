@@ -164,7 +164,7 @@ export class Preferences {
         try {
             // This generated SDK method omits OAuth headers, unlike document APIs.
             userId = (await this.onshape.userApi.sessionInfo({
-                headers: { Authorization: 'Bearer ' + await this.onshape.getAccessToken() },
+                headers: { Authorization: await this.onshape.getAccessToken() },
             })).id;
         } catch { /* Use session-only local preferences. */ }
         this.onshape.userId = userId || '';
