@@ -70,6 +70,11 @@ library read does not delay an assembly insertion. Calls to the affected operati
 retain the existing conservative pacing and honor `Retry-After` when supplied.
 The app does not automatically replay failed writes.
 
+Both proxies follow up to three redirects for thumbnail GET requests. Each hop
+must stay on the original HTTPS origin (scheme, host, and port) and have no URL
+credentials. Redirect bodies are discarded; the final image is streamed normally.
+Other API requests do not gain automatic redirect following.
+
 Run `npm test` to validate rate limiting and browsing behavior.
 
 Failed library reads are not cached. Reopen a library or folder to retry after
@@ -89,9 +94,9 @@ output, the proxy returns a 502 JSON error. If it fails after output starts, the
 response may be truncated; the proxy cannot replace its status and does not
 append error text to the partially transmitted JSON or image.
 
-Run `npm run test:php` with PHP and the cURL extension installed to validate the
-proxy against a local upstream. Set `PHP_BIN` to a PHP executable path if it is
-not on PATH.
+Run `npm run test:php` with PHP, the cURL extension, and OpenSSL installed to
+validate streaming and redirects against local HTTP and HTTPS upstreams.
+Set `PHP_BIN` and `OPENSSL_BIN` to their executable paths if they are not on PATH.
 
 ## Having two deployment locations
 

@@ -4,7 +4,7 @@
  * Forward an upstream response without retaining its full body in PHP memory.
  * Leave PHP, web-server, and reverse-proxy buffering under the host's control.
  */
-function streamProxyResponse($ch, $log)
+function streamProxyResponse($ch, $log, $thumbnailUrl = null)
 {
     $status = 502;
     $headers = array();
@@ -20,6 +20,7 @@ function streamProxyResponse($ch, $log)
 
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
     curl_setopt($ch, CURLOPT_HEADER, false);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
     curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($handle, $line) use (&$status, &$headers) {
         if (preg_match('/^HTTP\/\S+\s+(\d{3})/', $line, $matches)) {
             // A new block replaces informational responses (e.g. 100 Continue).
@@ -36,7 +37,9 @@ function streamProxyResponse($ch, $log)
         }
         return strlen($line);
     });
-    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($handle, $chunk) use (&$bodyStarted, &$preview, $sendHeaders) {
+    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($handle, $chunk) use (&$bodyStarted, &$preview, &$status, $thumbnailUrl, $sendHeaders) {
+        // Discard redirect bodies until the destination has passed the origin check.
+        if ($thumbnailUrl !== null && $status >= 300 && $status < 400) return strlen($chunk);
         if (!$bodyStarted) {
             $sendHeaders();
             $bodyStarted = true;
@@ -49,8 +52,29 @@ function streamProxyResponse($ch, $log)
         return strlen($chunk);
     });
 
-    $success = curl_exec($ch);
-    $info = curl_getinfo($ch);
+    for ($redirects = 0; ; $redirects++) {
+        $success = curl_exec($ch);
+        $info = curl_getinfo($ch);
+        if ($success === false || $thumbnailUrl === null || $status < 300 || $status >= 400) break;
+        // cURL resolves relative Location values without following them.
+        $destination = curl_getinfo($ch, CURLINFO_REDIRECT_URL);
+        $source = parse_url($thumbnailUrl);
+        $target = $destination ? parse_url($destination) : false;
+        if ($redirects >= 3 || !$source || !$target ||
+            strtolower($source['scheme'] ?? '') !== 'https' ||
+            strtolower($target['scheme'] ?? '') !== 'https' ||
+            strtolower($source['host'] ?? '') !== strtolower($target['host'] ?? '') ||
+            ($source['port'] ?? 443) !== ($target['port'] ?? 443) ||
+            isset($target['user']) || isset($target['pass'])) {
+            http_response_code(502);
+            header('Content-Type: application/json');
+            echo '{"error":"Thumbnail redirect refused"}';
+            return $info;
+        }
+        curl_setopt($ch, CURLOPT_URL, $destination);
+        $status = 502;
+        $headers = array();
+    }
     if ($success === false) {
         $log('Upstream transfer failed: ' . curl_error($ch) . "\n");
         if (!$bodyStarted) {

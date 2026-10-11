@@ -129,7 +129,9 @@ if ($method == "POST") {
 }
 // Make the request
 $start_time = microtime(true);
-$info = streamProxyResponse($ch, 'oalog');
+$thumbnailUrl = $method === 'GET' && preg_match('#^/api/(?:v\d+/)?thumbnails/#', $apiurl)
+  ? $onshapeapi : null;
+$info = streamProxyResponse($ch, 'oalog', $thumbnailUrl);
 oalog("TIME:\n" . date("h:i:sa") . "\n");
 
 
