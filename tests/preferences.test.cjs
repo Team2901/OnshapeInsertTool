@@ -22,7 +22,10 @@ function harness(storage = new Map(), options = {}) {
     const calls = { create: 0, writes: [], reads: 0 };
     const restriction = { response: new Response(JSON.stringify({ message: 'Free accounts only allow access to public documents. Upgrade your account to get full access to private documents.' }), { status: 409 }) };
     const onshape = { server: 'https://cad.onshape.com', userId: options.user || 'user', freeUser: false,
-        userApi: { sessionInfo: async () => {
+        getAccessToken: async () => 'test-access-token',
+        userApi: { sessionInfo: async (init) => {
+            assert.equal(init.headers.Authorization, 'Bearer test-access-token');
+            calls.identityAuthenticated = true;
             if (options.identityError) throw new Error('identity unavailable');
             return { id: options.user || 'user' };
         } },
@@ -139,6 +142,7 @@ test('launches without user IDs resolve identity before reading storage and igno
     storage.set(unscoped, '{"favorited":[{"id":"unscoped"}]}');
     const alice = harness(storage, { user: 'alice' }); alice.onshape.userId = '';
     await alice.prefs.initUserPreferences('App');
+    assert.equal(alice.calls.identityAuthenticated, true);
     assert.equal((await alice.prefs.getAllOfMagicType('favorited')).length, 0);
     await alice.prefs.addMagicNode({ id: 'alice-part' }, 'favorited');
     const bob = harness(storage, { user: 'bob' }); bob.onshape.userId = '';

@@ -161,7 +161,12 @@ export class Preferences {
         this.userPreferencesInfo = undefined;
         // Launch URLs need not contain a user ID; never share persistent data under an empty identity.
         let userId: string;
-        try { userId = (await this.onshape.userApi.sessionInfo()).id; } catch { /* Use session-only local preferences. */ }
+        try {
+            // This generated SDK method omits OAuth headers, unlike document APIs.
+            userId = (await this.onshape.userApi.sessionInfo({
+                headers: { Authorization: 'Bearer ' + await this.onshape.getAccessToken() },
+            })).id;
+        } catch { /* Use session-only local preferences. */ }
         this.onshape.userId = userId || '';
         const scope = JSON.stringify([this.onshape.server, this.onshape.userId, appName]);
         const cacheKey = userId && 'insert-tool:preferences-location:' + scope;
