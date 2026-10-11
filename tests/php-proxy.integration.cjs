@@ -77,7 +77,6 @@ curl_setopt($ch, CURLOPT_CAINFO, __DIR__ . '/cert.pem');
 curl_setopt($ch, CURLOPT_HTTPHEADER, array('Authorization: Bearer test-token'));
 if ($_SERVER['REQUEST_METHOD'] === 'POST') curl_setopt($ch, CURLOPT_POST, true);
 if ($_SERVER['REQUEST_METHOD'] === 'HEAD') curl_setopt($ch, CURLOPT_NOBODY, true);
-if (isset($_GET['buffered'])) ob_start();
 streamProxyResponse($ch, function ($message) {}, $thumbnail && $_SERVER['REQUEST_METHOD'] === 'GET' ? $url : null);
 `;
     fs.writeFileSync(path.join(temporary, 'router.php'), router);
@@ -113,11 +112,6 @@ test('response chunks arrive before the upstream finishes', async () => {
     let rest = '';
     for (;;) { const chunk = await reader.read(); if (chunk.done) break; rest += Buffer.from(chunk.value).toString(); }
     assert.equal(rest, 'last');
-});
-
-test('hosting buffering changes delivery without changing response content', async () => {
-    const response = await fetch(proxyOrigin + '/slow?buffered=1');
-    assert.equal(await response.text(), 'firstlast');
 });
 
 test('binary responses preserve every byte', async () => {

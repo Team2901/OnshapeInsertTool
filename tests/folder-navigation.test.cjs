@@ -59,12 +59,13 @@ test('failed library root, folder and search downloads are retried after recover
     assert.equal(reads, recoveredReads);
 });
 
-test('default browsing cache reuses reads for 5 minutes without extending expiry on access', async () => {
+test('concurrent and repeat browsing reads share a request for 5 minutes without extending expiry', async () => {
     let now = 0;
     let calls = 0;
     const cache = new RequestCache(undefined, 64, () => now);
     const read = () => Promise.resolve(++calls);
-    await cache.get('folder', read);
+    const results = await Promise.all([cache.get('folder', read), cache.get('folder', read)]);
+    assert.deepEqual(results, [1, 1]);
     now = 30000;
     await cache.get('folder', read);
     now = 5 * 60 * 1000 - 1;
@@ -220,21 +221,6 @@ test('App coalesces breadcrumb saves and flushes pending work when hidden', asyn
     assert.equal(JSON.stringify(saved), '[[{"id":"b"}],[{"id":"c"}]]');
     await advance(1000);
     assert.equal(saved.length, 2);
-});
-
-test('repeat and concurrent folder reads share a request, then expire', async () => {
-    let now = 0;
-    let calls = 0;
-    const cache = new RequestCache(30, 2, () => now);
-    const read = () => { calls++; return Promise.resolve({ items: [] }); };
-    const first = cache.get('folder', read);
-    assert.equal(cache.get('folder', read), first);
-    await first;
-    assert.equal(await cache.get('folder', read), await first);
-    assert.equal(calls, 1);
-    now = 30;
-    await cache.get('folder', read);
-    assert.equal(calls, 2);
 });
 
 test('failed reads can be retried and least recently used pages are evicted', async () => {
@@ -402,26 +388,32 @@ test('global library reads are cached for 3 hours, personal reads stay fresh', a
     now++;
     await app.getGlobalLibraryRead('global', 'folder:global:child', read);
     assert.equal(calls, 2);
-    app.libraries.browseRevision++;
-    await app.getGlobalLibraryRead('global', 'folder:global:child', read);
-    assert.equal(calls, 3);
     await app.getGlobalLibraryRead('personal', 'folder:personal:child', read);
     await app.getGlobalLibraryRead('personal', 'folder:personal:child', read);
-    assert.equal(calls, 5);
+    assert.equal(calls, 4);
     app.currentBreadcrumbs = [{ id: 'GL' }];
     await app.getGlobalLibraryRead('nested', 'library:nested', read);
     app.currentBreadcrumbs = [];
     await app.getGlobalLibraryRead('nested', 'library:nested', read);
-    assert.equal(calls, 6);
+    assert.equal(calls, 5);
 });
 
 test('library writes invalidate browsing reads before and after completion', async () => {
     const { Library } = load('app/libraries.ts', {
         './preferences': { Preferences: class {} },
     });
+    const { App } = load('app/app.ts', {
+        './baseapp': { BaseApp: class {} },
+        './common/requestcache': { RequestCache },
+    });
     const library = Object.create(Library.prototype);
     library.browseRevision = 0;
     library.getAppElement = async () => ({ id: 'folder' });
+    const app = Object.create(App.prototype);
+    app.libraries = library;
+    app.globalLibrariesNodes = ['global'];
+    let contents;
+    const read = () => app.getGlobalLibraryRead('global', 'folder', async () => contents);
     let finish;
     library.setBTGArray = () => new Promise((resolve) => { finish = resolve; });
     for (const write of [
@@ -429,13 +421,19 @@ test('library writes invalidate browsing reads before and after completion', asy
         () => library.setProxyFolder({ id: 'global' }, { id: 'folder' }, []),
         () => library.setLibrarySearchInfo([], { id: 'global' }),
     ]) {
-        const before = library.browseRevision;
+        app.globalLibraryReads = new RequestCache();
+        contents = 'before write';
+        assert.equal(await read(), 'before write');
+        contents = 'during write';
         const pending = write();
-        assert.equal(library.browseRevision, before + 1);
+        assert.equal(await read(), 'during write');
         await new Promise(setImmediate);
+        contents = 'after write';
         finish(true);
         await pending;
-        assert.equal(library.browseRevision, before + 2);
+        assert.equal(await read(), 'after write');
+        contents = 'uncached change';
+        assert.equal(await read(), 'after write');
     }
 });
 
