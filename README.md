@@ -41,6 +41,24 @@ If you have done everything right, when you add the application to your account,
 
 To make change to the application, edit the `app/app.ts` file.  It is built on top of the `app/baseapp.ts` file which has all the common routines.
 
+## PHP API proxy responses
+
+The PHP API proxy forwards response body chunks as cURL receives them instead of
+holding the entire response in a PHP string. It preserves the upstream status,
+content type, rate-limit remaining count, and retry-after header. Optional logging
+retains only the first 200 body bytes.
+
+The proxy leaves hosting output buffers and compression settings unchanged.
+PHP, the web server, or a reverse proxy may still buffer delivery, so earlier
+arrival of bytes depends on the host. If an upstream transfer fails before body
+output, the proxy returns a 502 JSON error. If it fails after output starts, the
+response may be truncated; the proxy cannot replace its status and does not
+append error text to the partially transmitted JSON or image.
+
+Run `npm run test:php` with PHP and the cURL extension installed to validate the
+proxy against a local upstream. Set `PHP_BIN` to a PHP executable path if it is
+not on PATH.
+
 ## Having two deployment locations
 
 When developming it is useful to have a test location as well as a production version.

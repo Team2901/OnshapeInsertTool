@@ -27,6 +27,7 @@
 //  EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 require_once 'config.php';
+require_once __DIR__ . '/stream.php';
 $logfile = NULL;
 
 // If they ask for a log file to be written, open it up
@@ -118,8 +119,6 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, array(
 ));
 
 
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HEADER, true);
 curl_setopt($ch, CURLINFO_HEADER_OUT, true);
 
 if ($method == "POST") {
@@ -130,49 +129,15 @@ if ($method == "POST") {
 }
 // Make the request
 $start_time = microtime(true);
-$response = curl_exec($ch);
-$err = curl_error($ch);
-
-// Dump out the headers so we can confirm what we asked for
-$header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-
-$response_headers = substr($response, 0, $header_size);
-$response_body = substr($response, $header_size);
-oalog("RESPONSE HEADERS:\n" . $response_headers . "\n");
-oalog("RESPONSE BODY (first 200 chars):\n" . substr($response_body, 0, 200) . "\n");
+$info = streamProxyResponse($ch, 'oalog');
 oalog("TIME:\n" . date("h:i:sa") . "\n");
 
 
 oalog("Timing" . (round(microtime(true) - $start_time, 2) * 1000));
 // Log all the information about the request/response
-$info = curl_getinfo($ch);
 oalog("INFO:\n" . print_r($info, true));
 
 unset($ch);
-
-// Propagate HTTP status code
-http_response_code($info['http_code']);
-
-// Propagate Content-Type
-if (!empty($info['content_type'])) {
-  header('Content-Type: ' . $info['content_type']);
-}
-
-// Look for specific headers in the response
-$header_lines = explode("\r\n", $response_headers);
-
-foreach ($header_lines as $line) {
-
-  if (stripos($line, 'x-rate-limit-remaining:') === 0) {
-    header($line);
-  }
-
-  if (stripos($line, 'retry-after:') === 0) {
-    header($line);
-  }
-}
-
-echo $response_body;
 
 // Close the log file
 closealog();
