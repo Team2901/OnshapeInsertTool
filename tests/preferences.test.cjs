@@ -13,7 +13,7 @@ function harness(storage = new Map(), options = {}) {
         getItem: key => storage.has(key) ? storage.get(key) : null,
         setItem: (key, value) => { if (options.blockWrite) throw new Error('blocked'); storage.set(key, value); },
     };
-    vm.runInNewContext(code.outputText, { exports, localStorage, console: { info() {}, warn() {}, log() {} },
+    vm.runInNewContext(code.outputText, { exports, localStorage, navigator: { locks: options.locks }, console: { info() {}, warn() {}, log() {} },
         require: name => name === 'onshape-typescript-fetch' ? {
             GetAssociativeDataWvmEnum: { w: 'w' },
             BTGlobalTreeNodeInfoFromJSONTyped: value => value,
@@ -22,6 +22,10 @@ function harness(storage = new Map(), options = {}) {
     const calls = { create: 0, writes: [], reads: 0 };
     const restriction = { response: new Response(JSON.stringify({ message: 'Free accounts only allow access to public documents. Upgrade your account to get full access to private documents.' }), { status: 409 }) };
     const onshape = { server: 'https://cad.onshape.com', userId: options.user || 'user', freeUser: false,
+        userApi: { sessionInfo: async () => {
+            if (options.identityError) throw new Error('identity unavailable');
+            return { id: options.user || 'user' };
+        } },
         globalTreeNodesApi: { globalTreeNodesMagic: async () => ({ items: [] }) },
         documentApi: { createDocument: async () => { calls.create++; throw options.error || restriction; } },
         blobElementApi: {
@@ -127,4 +131,50 @@ test('successful remote writes preserve existing settings and send the selected 
     const body = JSON.parse(request.file);
     assert.equal(body.setting, true);
     assert.equal(body.favorited[0].id, 'old');
+});
+
+test('launches without user IDs resolve identity before reading storage and ignore unscoped preferences', async () => {
+    const storage = new Map();
+    const unscoped = 'insert-tool:local-preferences:' + JSON.stringify(['https://cad.onshape.com', '', 'App']);
+    storage.set(unscoped, '{"favorited":[{"id":"unscoped"}]}');
+    const alice = harness(storage, { user: 'alice' }); alice.onshape.userId = '';
+    await alice.prefs.initUserPreferences('App');
+    assert.equal((await alice.prefs.getAllOfMagicType('favorited')).length, 0);
+    await alice.prefs.addMagicNode({ id: 'alice-part' }, 'favorited');
+    const bob = harness(storage, { user: 'bob' }); bob.onshape.userId = '';
+    await bob.prefs.initUserPreferences('App');
+    assert.equal((await bob.prefs.getAllOfMagicType('favorited')).length, 0);
+    assert.equal(bob.onshape.userId, 'bob');
+    const unknown = harness(storage, { identityError: true });
+    await unknown.prefs.initUserPreferences('App');
+    assert.equal((await unknown.prefs.getAllOfMagicType('favorited')).length, 0);
+    const before = JSON.stringify([...storage]);
+    assert.equal(await unknown.prefs.addMagicNode({ id: 'session-part' }, 'favorited'), false);
+    assert.equal((await unknown.prefs.getAllOfMagicType('favorited'))[0].id, 'session-part');
+    assert.equal(JSON.stringify([...storage]), before);
+});
+
+test('two panels preserve additions, removals and unrelated settings through shared writes', async () => {
+    let queue = Promise.resolve();
+    const locks = { request: (_key, save) => {
+        const next = queue.then(save); queue = next.catch(() => {}); return next;
+    } };
+    const storage = new Map();
+    const one = harness(storage, { locks }), two = harness(storage, { locks });
+    await one.prefs.initUserPreferences('App'); await two.prefs.initUserPreferences('App');
+    await Promise.all([
+        one.prefs.addMagicNode({ id: 'one' }, 'favorited'),
+        two.prefs.addMagicNode({ id: 'two' }, 'favorited'),
+        one.prefs.setCustom('setting', true),
+        two.prefs.setLastKnownLocation([{ id: 'folder' }]),
+    ]);
+    assert.equal((await one.prefs.getAllOfMagicType('favorited')).length, 2);
+    await Promise.all([
+        one.prefs.removeMagicNode({ id: 'one' }, 'favorited'),
+        two.prefs.addMagicNode({ id: 'three' }, 'favorited'),
+    ]);
+    const reload = harness(storage); await reload.prefs.initUserPreferences('App');
+    assert.equal(JSON.stringify((await reload.prefs.getAllOfMagicType('favorited')).map(node => node.id)), '["three","two"]');
+    assert.equal(await reload.prefs.getCustom('setting', false), true);
+    assert.equal((await reload.prefs.getLastKnownLocation())[0].id, 'folder');
 });

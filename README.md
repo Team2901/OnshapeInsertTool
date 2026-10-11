@@ -51,7 +51,12 @@ create a public preferences document as a fallback. Existing Onshape preferences
 documents remain supported.
 
 Local preferences stay in the current browser profile and app origin, scoped to
-the app name and user ID when Onshape supplies one; they do not sync between
+the app name and authenticated user ID. The app resolves identity before loading
+stored preferences; when identity is unavailable, local preferences stay in the
+current session and saves report failure. Old preferences stored without a user
+ID are ignored because they cannot be safely assigned to an account.
+Open panels read the latest stored preferences before updates and use browser
+Web Locks, when available, to serialize writes. They do not sync between
 browsers. Clearing site data removes them. If browser storage is unavailable,
 preferences remain available for the current session, but saves report failure.
 Other initialization errors stop startup with a retry message instead of continuing
@@ -66,6 +71,9 @@ retain the existing conservative pacing and honor `Retry-After` when supplied.
 The app does not automatically replay failed writes.
 
 Run `npm test` to validate rate limiting and browsing behavior.
+
+Failed library reads are not cached. Reopen a library or folder to retry after
+a temporary network or API error.
 
 ## PHP API proxy responses
 

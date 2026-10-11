@@ -4823,7 +4823,7 @@ export class App extends BaseApp {
 
                 if (skipRender) return resolve(this.currentSearchItems.length > 0);
                 resolve(this.getSearchItemByIndex(accessId, 0));
-            });
+            }).catch(reject);
         });
     }
 
@@ -5489,6 +5489,8 @@ export class App extends BaseApp {
                         dumpNodes.innerText =
                             'Library does not exist\nPlease recover it or remove this library';
                         this.processMagicNode(this.currentBreadcrumbs[0].id, accessId);
+                    } else {
+                        dumpNodes.innerText = 'Unable to load library. Open it again to retry.';
                     }
                 });
         } else if (item.jsonType === 'proxy-folder') {
@@ -5502,7 +5504,7 @@ export class App extends BaseApp {
                 if (library !== undefined) {
                     this.addBreadcrumbNode(item);
                     //use breadcrumbs for library
-                    this.getGlobalLibraryRead(item.projectId, 'folder:' + item.projectId + ':' + item.id, () =>
+                    return this.getGlobalLibraryRead(item.projectId, 'folder:' + item.projectId + ':' + item.id, () =>
                         this.libraries.getProxyFolder(library, item.id)
                     ).then((res) => {
                         this.ProcessNodeResults(
@@ -5515,6 +5517,8 @@ export class App extends BaseApp {
                         );
                     });
                 }
+            }).catch(() => {
+                if (this.validAccessId(accessId)) dumpNodes.innerText = 'Unable to load library folder. Open it again to retry.';
             });
         } else if (item.jsonType === 'home') {
             this.processHome(dumpNodes);

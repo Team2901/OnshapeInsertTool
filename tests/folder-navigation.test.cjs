@@ -22,6 +22,43 @@ function load(file, dependencies = {}, globals = {}) {
 
 const { RequestCache } = load('app/common/requestcache.ts');
 
+test('failed library root, folder and search downloads are retried after recovery', async () => {
+    const { Preferences } = load('app/preferences.ts');
+    const { Library } = load('app/libraries.ts', { './preferences': { Preferences } });
+    const { App } = load('app/app.ts', {
+        './baseapp': { BaseApp: class {} }, './common/requestcache': { RequestCache },
+    });
+    const library = Object.create(Library.prototype);
+    library.proxyChildrenName = 'children'; library.searchInfoName = 'search';
+    library.encodeLibraryName = library.decodeLibraryName = value => value;
+    library.getProxyDocumentFromQuery = async () => ({ id: 'global', wvmid: 'workspace' });
+    library.getAppElement = async (name, location) => Object.assign(location, { elementId: name });
+    let failing = true, reads = 0;
+    library.onshape = { blobElementApi: { downloadFileWorkspace: async () => {
+        reads++;
+        if (failing) throw new Error('rate limited');
+        return '{"children":[{"id":"part"}],"all":[{"id":"search-part"}]}';
+    } } };
+    library.getProxyLibrary = () => library.getProxyLibraryFromDocuments({ items: [{ name: 'Global' }] }, 'Global');
+    const app = Object.create(App.prototype);
+    app.libraries = library; app.globalLibrariesNodes = ['global']; app.currentBreadcrumbs = [];
+    const loaders = {
+        root: () => library.getProxyLibrary(),
+        folder: () => library.getProxyFolder({ id: 'global', wvmid: 'workspace' }, 'folder'),
+        search: () => library.getLibrarySearchInfo('global'),
+    };
+    for (const [key, read] of Object.entries(loaders)) {
+        await assert.rejects(app.getGlobalLibraryRead('global', key, read), /rate limited/);
+    }
+    failing = false;
+    assert.equal((await app.getGlobalLibraryRead('global', 'root', loaders.root)).contents[0].id, 'part');
+    assert.equal((await app.getGlobalLibraryRead('global', 'folder', loaders.folder))[0].id, 'part');
+    assert.equal((await app.getGlobalLibraryRead('global', 'search', loaders.search))[0].id, 'search-part');
+    const recoveredReads = reads;
+    await app.getGlobalLibraryRead('global', 'folder', loaders.folder);
+    assert.equal(reads, recoveredReads);
+});
+
 test('default browsing cache reuses reads for 5 minutes without extending expiry on access', async () => {
     let now = 0;
     let calls = 0;

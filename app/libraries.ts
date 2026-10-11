@@ -1351,17 +1351,10 @@ export class Library extends Preferences {
     }
 
     public getLibrarySearchInfo(libraryId: string): Promise<BTGlobalTreeNodeInfo[]> {
-        return new Promise((resolve, reject) => {
-            this.getProxyLibrary(undefined, libraryId).then((res) => {
-                if (res === undefined) return resolve(undefined);
-                let { library } = res;
-                this.getAppElement(this.searchInfoName, library).then((res) => {
-                    if (res === undefined) resolve(undefined);
-                    this.getBTGArray('all', library).then((res) => {
-                        resolve(res);
-                    });
-                });
-            });
+        return this.getProxyLibrary(undefined, libraryId).then(async (res) => {
+            if (res === undefined) return undefined;
+            const library = await this.getAppElement(this.searchInfoName, res.library);
+            return this.getBTGArray('all', library);
         });
     }
     public setLibrarySearchInfo(
@@ -1638,11 +1631,10 @@ export class Library extends Preferences {
                                             this.encodeLibraryName(libraryName);
                                         resolve({ contents, library, descendants });
                                     }
-                                );
+                                ).catch(reject);
                             })
                             .catch((err) => {
-                                console.log(err);
-                                resolve(undefined);
+                                reject(err);
                             });
                     }
                 })
@@ -1797,10 +1789,10 @@ export class Library extends Preferences {
             library = Object.assign({}, library);
             this.getAppElement(folderId, library)
                 .then((folder: BTGlobalTreeNodeInfo) => {
-                    if (folder === undefined) resolve(undefined);
+                    if (folder === undefined) return resolve(undefined);
                     this.getBTGArray(this.proxyChildrenName, folder).then((res) => {
                         resolve(res);
-                    });
+                    }).catch(_reject);
                 })
                 .catch((err) => {
                     _reject(err);

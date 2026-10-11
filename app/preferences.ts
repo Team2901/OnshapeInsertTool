@@ -116,6 +116,7 @@ export class Preferences {
 
     private localPreferencesKey: string;
     private localPreferences: { [key: string]: any };
+    private localStorageFailed = false;
 
     private validPreferencesLocation(info: BTGlobalTreeProxyInfo): boolean {
         return !!(info && info.id && info.wvmid && info.elementId);
@@ -124,7 +125,7 @@ export class Preferences {
     private useLocalPreferences(appName: string, key: string): BTGlobalTreeProxyInfo {
         this.localPreferencesKey = key;
         let stored: string;
-        try { stored = localStorage.getItem(key); } catch { /* Session-only fallback. */ }
+        try { if (key) stored = localStorage.getItem(key); } catch { /* Session-only fallback. */ }
         try { this.localPreferences = JSON.parse(stored); } catch { /* Start empty. */ }
         if (!this.localPreferences || typeof this.localPreferences !== 'object' || Array.isArray(this.localPreferences))
             this.localPreferences = { appName };
@@ -134,19 +135,41 @@ export class Preferences {
         return this.userPreferencesInfo;
     }
 
+    private readLocalPreferences(): { [key: string]: any } {
+        try {
+            const stored = !this.localStorageFailed && this.localPreferencesKey && localStorage.getItem(this.localPreferencesKey);
+            const value = stored && JSON.parse(stored);
+            if (value && typeof value === 'object' && !Array.isArray(value)) this.localPreferences = value;
+        } catch { /* Keep the session copy when storage is unavailable. */ }
+        return this.localPreferences;
+    }
+
+    private updateLocalPreferences(update: (value: any) => any): Promise<boolean> {
+        const save = () => this.saveAppJson(this.userPreferencesInfo, update(this.readLocalPreferences()));
+        if (this.localPreferencesKey && typeof navigator !== 'undefined' && navigator.locks)
+            return navigator.locks.request(this.localPreferencesKey, save);
+        // The read, update and storage write are synchronous when Web Locks are unavailable.
+        return save();
+    }
+
     /** Initialize remote preferences, or local preferences for the free-account restriction. */
     public async initUserPreferences(appName: string): Promise<BTGlobalTreeProxyInfo> {
         this.newUser = false;
         this.localPreferencesKey = undefined;
         this.localPreferences = undefined;
+        this.localStorageFailed = false;
         this.userPreferencesInfo = undefined;
+        // Launch URLs need not contain a user ID; never share persistent data under an empty identity.
+        let userId: string;
+        try { userId = (await this.onshape.userApi.sessionInfo()).id; } catch { /* Use session-only local preferences. */ }
+        this.onshape.userId = userId || '';
         const scope = JSON.stringify([this.onshape.server, this.onshape.userId, appName]);
-        const cacheKey = 'insert-tool:preferences-location:' + scope;
-        const localKey = 'insert-tool:local-preferences:' + scope;
+        const cacheKey = userId && 'insert-tool:preferences-location:' + scope;
+        const localKey = userId && 'insert-tool:local-preferences:' + scope;
         let cached: BTGlobalTreeProxyInfo;
         try {
-            if (localStorage.getItem(localKey) !== null) return this.useLocalPreferences(appName, localKey);
-            cached = JSON.parse(localStorage.getItem(cacheKey));
+            if (localKey && localStorage.getItem(localKey) !== null) return this.useLocalPreferences(appName, localKey);
+            if (cacheKey) cached = JSON.parse(localStorage.getItem(cacheKey));
         } catch { /* Invalid or unavailable storage must not prevent initialization. */ }
         if (this.validPreferencesLocation(cached)) {
             this.userPreferencesInfo = cached;
@@ -158,7 +181,7 @@ export class Preferences {
             const info = await this.getAppElement(appName, document);
             if (!this.validPreferencesLocation(info)) throw new Error('Preferences location is incomplete');
             this.userPreferencesInfo = info;
-            try { localStorage.setItem(cacheKey, JSON.stringify(info)); } catch { /* Remote storage still works. */ }
+            try { if (cacheKey) localStorage.setItem(cacheKey, JSON.stringify(info)); } catch { /* Remote storage still works. */ }
             return info;
         } catch (error) {
             // Only the observed account restriction warrants local fallback.
@@ -177,10 +200,11 @@ export class Preferences {
     }
 
     private async saveAppJson(libInfo: BTGlobalTreeProxyInfo, value: JSON): Promise<boolean> {
-        if (this.localPreferencesKey && libInfo === this.userPreferencesInfo) {
+        if (this.localPreferences && libInfo === this.userPreferencesInfo) {
             this.localPreferences = JSON.parse(JSON.stringify(value));
+            if (!this.localPreferencesKey) return false;
             try { localStorage.setItem(this.localPreferencesKey, JSON.stringify(value)); return true; }
-            catch { return false; } // Retain the session copy without claiming durable storage.
+            catch { this.localStorageFailed = true; return false; } // Retain the session copy without claiming durable storage.
         }
         if (!this.validPreferencesLocation(libInfo)) return false;
         try {
@@ -225,8 +249,8 @@ export class Preferences {
         element: any,
         libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
     ): Promise<boolean> {
-        if (this.localPreferencesKey && libInfo === this.userPreferencesInfo)
-            return this.saveAppJson(libInfo, { ...this.localPreferences, [name]: element } as unknown as JSON);
+        if (this.localPreferences && libInfo === this.userPreferencesInfo)
+            return this.updateLocalPreferences(value => ({ ...value, [name]: element }));
         try {
             const value = await this.getAppJson(libInfo);
             value[name] = element;
@@ -312,16 +336,18 @@ export class Preferences {
     ): Promise<boolean> {
         const type = this.magicTypeToBTGType[magicType];
         if (!type) return false;
-        const nodes = this.localPreferencesKey && libInfo === this.userPreferencesInfo
-            ? (this.localPreferences[type] || [])
-            : await this.getAllOfMagicType(magicType, libInfo);
-        const result: BTGlobalTreeNodeMagicDataInfo[] = [];
-        for (const node of [item, ...nodes] as BTGlobalTreeNodeMagicDataInfo[]) {
-            if (!result.some(existing => existing.id === node.id && existing.configuration === node.configuration))
-                result.push(node);
-        }
-        if (limit > 0) result.splice(limit);
-        return this.setBTGArray(libInfo, type, result);
+        const add = (nodes: BTGlobalTreeNodeMagicDataInfo[]) => {
+            const result: BTGlobalTreeNodeMagicDataInfo[] = [];
+            for (const node of [item, ...nodes]) {
+                if (!result.some(existing => existing.id === node.id && existing.configuration === node.configuration))
+                    result.push(node);
+            }
+            if (limit > 0) result.splice(limit);
+            return result;
+        };
+        if (this.localPreferences && libInfo === this.userPreferencesInfo)
+            return this.updateLocalPreferences(value => ({ ...value, [type]: add(value[type] || []) }));
+        return this.setBTGArray(libInfo, type, add(await this.getAllOfMagicType(magicType, libInfo)));
     }
 
     /**
@@ -333,6 +359,12 @@ export class Preferences {
         magicType: string,
         libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
     ): Promise<boolean> {
+        if (this.localPreferences && libInfo === this.userPreferencesInfo) {
+            const type = this.magicTypeToBTGType[magicType];
+            return this.updateLocalPreferences(value => ({ ...value,
+                [type]: (value[type] || []).filter(node => node.id !== item.id || node.configuration !== item.configuration),
+            }));
+        }
         return new Promise((resolve, _reject) => {
             // if (this.freeUser) return resolve(false);
             const BTGType = this.magicTypeToBTGType[magicType];
@@ -504,8 +536,8 @@ export class Preferences {
         } else {
             info = param2;
         }
-        if (this.localPreferencesKey && libInfo === this.userPreferencesInfo)
-            return this.saveAppJson(libInfo, { ...this.localPreferences, ...info } as unknown as JSON);
+        if (this.localPreferences && libInfo === this.userPreferencesInfo)
+            return this.updateLocalPreferences(value => ({ ...value, ...info }));
         return this.getAppJson(libInfo)
             .then(value => {
                 for (const name in info) value[name] = info[name];
@@ -559,7 +591,8 @@ export class Preferences {
                     }
                 })
                 .catch((err) => {
-                    console.log(err);
+                    // Preference lists may default to empty; library reads must fail so caches can retry.
+                    if (libInfo !== this.userPreferencesInfo) return _reject(err);
                     resolve([]);
                 });
         });
@@ -571,8 +604,8 @@ export class Preferences {
      * @param libinfo The BTGTree containing info about which blob element to pull from./
      */
     public getAppJson(libInfo: BTGlobalTreeProxyInfo): Promise<JSON> {
-        if (this.localPreferencesKey && libInfo === this.userPreferencesInfo)
-            return Promise.resolve(JSON.parse(JSON.stringify(this.localPreferences)));
+        if (this.localPreferences && libInfo === this.userPreferencesInfo)
+            return Promise.resolve(JSON.parse(JSON.stringify(this.readLocalPreferences())));
         if (!this.validPreferencesLocation(libInfo))
             return Promise.reject(new Error('Preferences location is unavailable'));
         return new Promise((resolve, reject) => {
