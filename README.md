@@ -62,6 +62,12 @@ preferences remain available for the current session, but saves report failure.
 Other initialization errors stop startup with a retry message instead of continuing
 with an invalid preferences location.
 
+Startup reads the last browsing location once and remembers it so restoring the
+same location does not write preferences again. Empty breadcrumbs and the home
+location are treated as equivalent. Location changes are debounced for 500 ms,
+with only the latest pending location saved. Failed reads do not count as saved
+locations, and failed saves can be retried on a later navigation.
+
 ## API rate limiting
 
 The app tracks `X-Rate-Limit-Remaining` separately for each API operation, sharing

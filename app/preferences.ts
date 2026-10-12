@@ -293,7 +293,8 @@ export class Preferences {
     public getLastKnownLocation(
         libInfo: BTGlobalTreeProxyInfo = this.userPreferencesInfo
     ): Promise<Array<BTGlobalTreeNodeInfo>> {
-        return this.getBTGArray('last_known_location', libInfo);
+        // Keep read failures distinct from a successfully loaded home location.
+        return this.getAppJson(libInfo).then(value => value['last_known_location'] || []);
     }
 
     /**

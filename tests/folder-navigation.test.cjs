@@ -292,6 +292,90 @@ test('App coalesces breadcrumb saves and flushes pending work when hidden', asyn
     assert.equal(saved.length, 2);
 });
 
+function startupLocationHarness(location, local = false) {
+    const { CoalescedSave, advance } = saveHarness(() => Promise.resolve(true));
+    const storage = new Map([['preferences', JSON.stringify({ appName: 'App', last_known_location: location, setting: 'keep' })]]);
+    const calls = { reads: 0, writes: 0, failRead: false, failWrite: false };
+    let remote = JSON.parse(storage.get('preferences'));
+    const { Preferences } = load('app/preferences.ts', {}, {
+        localStorage: {
+            getItem: key => storage.get(key),
+            setItem: (key, value) => { calls.writes++; storage.set(key, value); },
+        },
+    });
+    const prefs = new Preferences({ blobElementApi: {
+        downloadFileWorkspace: async () => {
+            calls.reads++;
+            if (calls.failRead) throw new Error('read failed');
+            return JSON.stringify(remote);
+        },
+        uploadFileUpdateElement: async ({ file }) => {
+            calls.writes++;
+            if (calls.failWrite) throw new Error('write failed');
+            remote = JSON.parse(file);
+        },
+    } });
+    if (local) prefs.useLocalPreferences('App', 'preferences');
+    else prefs.userPreferencesInfo = { id: 'doc', wvmid: 'workspace', elementId: 'blob' };
+    const { App } = load('app/app.ts', {
+        './baseapp': { BaseApp: class {} },
+        './common/coalescedsave': { CoalescedSave },
+    }, {
+        window: { addEventListener() {} },
+        document: { addEventListener() {}, getElementById: () => null },
+    });
+    const app = Object.create(App.prototype);
+    app.preferences = prefs;
+    app.getDocumentElementInfo = async () => ({ elementType: 'ASSEMBLY' });
+    return { app, calls, advance, stored: () => local ? JSON.parse(storage.get('preferences')) : remote };
+}
+
+test('startup reads once and skips unchanged restores for remote and local preferences, then saves navigation', async () => {
+    for (const local of [false, true]) {
+        for (const location of [[{ id: 'folder', jsonType: 'folder' }], [], [{ jsonType: 'home' }]]) {
+            const { app, calls, advance, stored } = startupLocationHarness(location, local);
+            const target = await app.startAppPreferences();
+            const restored = target.jsonType === 'home' ? [] : app.currentBreadcrumbs;
+            app.setBreadcrumbs(restored);
+            await advance(500);
+            assert.equal(calls.reads, local ? 0 : 1);
+            assert.equal(calls.writes, 0);
+            if (target.jsonType === 'home') {
+                app.setBreadcrumbs([{ jsonType: 'home' }]);
+                await advance(500);
+                assert.equal(calls.writes, 0);
+            }
+            app.setBreadcrumbs([{ id: 'different', jsonType: 'folder' }]);
+            await advance(500);
+            assert.equal(calls.reads, local ? 0 : 2);
+            assert.equal(calls.writes, 1);
+            assert.equal(stored().last_known_location[0].id, 'different');
+            assert.equal(stored().setting, 'keep');
+        }
+    }
+});
+
+test('failed startup read does not mark home saved and a failed navigation save can be retried', async () => {
+    const { app, calls, advance, stored } = startupLocationHarness([{ id: 'old' }]);
+    calls.failRead = true;
+    assert.equal((await app.startAppPreferences()).jsonType, 'home');
+    calls.failRead = false;
+    app.setBreadcrumbs([]);
+    await advance(500);
+    assert.equal(calls.writes, 1);
+    assert.equal(stored().last_known_location.length, 0);
+    calls.failWrite = true;
+    app.setBreadcrumbs([{ id: 'new' }]);
+    await advance(500);
+    assert.equal(calls.writes, 2);
+    assert.equal(stored().last_known_location.length, 0);
+    calls.failWrite = false;
+    app.setBreadcrumbs([{ id: 'new' }]);
+    await advance(500);
+    assert.equal(calls.writes, 3);
+    assert.equal(stored().last_known_location[0].id, 'new');
+});
+
 test('failed reads can be retried and least recently used pages are evicted', async () => {
     const cache = new RequestCache(30, 2, () => 0);
     await assert.rejects(cache.get('a', () => Promise.reject(new Error('offline'))));

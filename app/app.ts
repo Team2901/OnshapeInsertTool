@@ -609,9 +609,18 @@ export class App extends BaseApp {
      * @param location Location to
      */
     public saveLastLocation(location: folderLocation): void {
+        this.getLastLocationSave().schedule(this.normalizeLastLocation(location.pathToRoot));
+    }
+
+    private normalizeLastLocation(locations: BTGlobalTreeNodeInfo[]): BTGlobalTreeNodeInfo[] {
+        return !locations?.length || (locations.length === 1 && locations[0].jsonType === 'home')
+            ? [] : locations;
+    }
+
+    private getLastLocationSave(savedLocation?: BTGlobalTreeNodeInfo[]): CoalescedSave<BTGlobalTreeNodeInfo[]> {
         if (!this.lastLocationSave) {
             this.lastLocationSave = new CoalescedSave((pathToRoot) =>
-                this.preferences.setLastKnownLocation(pathToRoot)
+                this.preferences.setLastKnownLocation(pathToRoot), 500, savedLocation
             );
             // Start pending work when the panel is hidden or closed; completion on close is best effort.
             window.addEventListener('pagehide', () => this.lastLocationSave.flush());
@@ -619,7 +628,7 @@ export class App extends BaseApp {
                 if (document.visibilityState === 'hidden') this.lastLocationSave.flush();
             });
         }
-        this.lastLocationSave.schedule(location.pathToRoot);
+        return this.lastLocationSave;
     }
     /**
      * Restore the last saved location
@@ -630,6 +639,7 @@ export class App extends BaseApp {
             this.preferences
                 .getLastKnownLocation()
                 .then((locations) => {
+                    this.getLastLocationSave(this.normalizeLastLocation(locations));
                     if (
                         locations === null ||
                         locations === undefined ||

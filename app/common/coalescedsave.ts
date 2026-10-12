@@ -5,7 +5,9 @@ export class CoalescedSave<T> {
     private saving = false;
     private timer: ReturnType<typeof setTimeout>;
 
-    constructor(private save: (value: T) => Promise<boolean>, private delay = 500) {}
+    constructor(private save: (value: T) => Promise<boolean>, private delay = 500, savedValue?: T) {
+        if (savedValue !== undefined) this.savedKey = JSON.stringify(savedValue);
+    }
 
     public schedule(value: T): void {
         const key = JSON.stringify(value);
