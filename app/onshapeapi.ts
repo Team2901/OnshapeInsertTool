@@ -111,6 +111,7 @@ export type onshapeConfig = {
  */
 
 export class OnshapeAPI {
+    private workspaceIdCache = new RequestCache<string>();
     private thumbnailCache = new RequestCache<string>(60000, 100);
     private pendingThumbnails = new Map<Element, () => void>();
     private thumbnailObserver: IntersectionObserver;
@@ -233,6 +234,15 @@ export class OnshapeAPI {
             }
         }
     }
+    public getDocumentWorkspaceId(did: string): Promise<string> {
+        return this.workspaceIdCache.get(did, async () => {
+            const workspaces = await this.documentApi.getDocumentWorkspaces({ did });
+            const workspaceId = workspaces?.[0]?.id;
+            if (!workspaceId) throw new Error('Document has no available workspace');
+            return workspaceId;
+        });
+    }
+
     public defaultAppFailure(reason: String): void {
         console.log(`Uncaught app failure`);
     }

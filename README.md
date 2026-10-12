@@ -80,6 +80,12 @@ Run `npm test` to validate rate limiting and browsing behavior.
 Failed library reads are not cached. Reopen a library or folder to retry after
 a temporary network or API error.
 
+Proxy libraries and preferences share a document-to-workspace-ID cache in the
+current app session. It retains up to 64 documents for five minutes and shares
+concurrent lookups. Failed lookups and documents with no available workspace
+are not cached. Workspace selection still uses the first workspace returned
+by Onshape; operations that need the full workspace list continue to fetch it.
+
 ## PHP API proxy responses
 
 The PHP API proxy forwards response body chunks as cURL receives them instead of

@@ -22,6 +22,75 @@ function load(file, dependencies = {}, globals = {}) {
 
 const { RequestCache } = load('app/common/requestcache.ts');
 
+function workspaceHarness() {
+    let now = 0;
+    const clock = { now: () => now };
+    const cache = load('app/common/requestcache.ts', {}, { Date: clock });
+    const { OnshapeAPI } = load('app/onshapeapi.ts', { './common/requestcache': cache });
+    const preferences = load('app/preferences.ts', {
+        'onshape-typescript-fetch': {
+            BTGlobalTreeNodeInfoFromJSONTyped: value => value,
+            GetAssociativeDataWvmEnum: { w: 'w' },
+        },
+        'onshape-typescript-fetch/runtime': { exists: (value, key) => value[key] !== undefined },
+    });
+    const { Library } = load('app/libraries.ts', {
+        './preferences': preferences,
+        'onshape-typescript-fetch/apis/AppAssociativeDataApi': { GetAssociativeDataWvmEnum: { w: 'w' } },
+    });
+    const onshape = new OnshapeAPI();
+    const library = new Library(onshape);
+    const prefs = new preferences.Preferences(onshape);
+    prefs.findPreferencesDoc = async () => ({ id: 'doc', name: '⚙ Preferences ⚙', owner: { id: 'user' } });
+    return { onshape, library, prefs, advance: ms => { now += ms; } };
+}
+
+test('library and preferences share concurrent workspace lookups, scoped by document and bounded by expiry', async () => {
+    const { onshape, library, prefs, advance } = workspaceHarness();
+    const reads = [];
+    onshape.documentApi = { getDocumentWorkspaces: async ({ did }) => {
+        reads.push(did);
+        return [{ id: did + '-workspace-' + reads.length }, { id: 'other-workspace' }];
+    } };
+    const query = { items: [{ id: 'doc', name: 'Library' }] };
+    const [proxy, preferences] = await Promise.all([
+        library.getProxyDocumentFromQuery(query), prefs.getPreferencesDoc(),
+    ]);
+    assert.equal(proxy.wvmid, 'doc-workspace-1');
+    assert.equal(preferences.wvmid, proxy.wvmid);
+    assert.equal(proxy.wvm, 'w');
+    assert.deepEqual(reads, ['doc']);
+    proxy.wvmid = 'mutated';
+    advance(5 * 60 * 1000 - 1);
+    assert.equal((await library.getProxyDocumentFromQuery(query)).wvmid, 'doc-workspace-1');
+    assert.equal(await onshape.getDocumentWorkspaceId('different'), 'different-workspace-2');
+    advance(1);
+    assert.equal((await prefs.getPreferencesDoc()).wvmid, 'doc-workspace-3');
+    assert.deepEqual(reads, ['doc', 'different', 'doc']);
+    const separate = workspaceHarness().onshape;
+    separate.documentApi = { getDocumentWorkspaces: async () => [{ id: 'separate-session' }] };
+    assert.equal(await separate.getDocumentWorkspaceId('doc'), 'separate-session');
+});
+
+test('failed and empty workspace lookups propagate and retry through both callers', async () => {
+    for (const failure of [new Error('network unavailable'), [], [{}], undefined]) {
+        const { onshape, library, prefs } = workspaceHarness();
+        let reads = 0;
+        onshape.documentApi = { getDocumentWorkspaces: async () => {
+            reads++;
+            if (reads === 1) {
+                if (failure instanceof Error) throw failure;
+                return failure;
+            }
+            return [{ id: 'recovered' }];
+        } };
+        await assert.rejects(library.getProxyDocumentFromQuery({ items: [{ id: 'doc' }] }),
+            /network unavailable|no available workspace/);
+        assert.equal((await prefs.getPreferencesDoc()).wvmid, 'recovered');
+        assert.equal(reads, 2);
+    }
+});
+
 test('failed library root, folder and search downloads are retried after recovery', async () => {
     const { Preferences } = load('app/preferences.ts');
     const { Library } = load('app/libraries.ts', { './preferences': { Preferences } });

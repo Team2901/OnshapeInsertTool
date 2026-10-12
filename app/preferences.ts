@@ -746,10 +746,10 @@ export class Preferences {
                         true
                     );
 
-                    this.onshape.documentApi
-                        .getDocumentWorkspaces({ did: document.id })
-                        .then((res) => {
-                            this.userPreferencesInfo.wvmid = res[0].id;
+                    this.onshape
+                        .getDocumentWorkspaceId(document.id)
+                        .then((workspaceId) => {
+                            this.userPreferencesInfo.wvmid = workspaceId;
                             this.userPreferencesInfo.wvm = GetAssociativeDataWvmEnum['w'];
 
                             resolve(this.userPreferencesInfo);

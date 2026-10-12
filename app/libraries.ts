@@ -1717,10 +1717,10 @@ export class Library extends Preferences {
                     true
                 );
 
-                this.onshape.documentApi
-                    .getDocumentWorkspaces({ did: res.items[0].id })
-                    .then((res) => {
-                        document.wvmid = res[0].id;
+                this.onshape
+                    .getDocumentWorkspaceId(res.items[0].id)
+                    .then((workspaceId) => {
+                        document.wvmid = workspaceId;
                         document.wvm = GetAssociativeDataWvmEnum['w'];
 
                         resolve(document);
