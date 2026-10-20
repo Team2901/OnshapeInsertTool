@@ -80,6 +80,10 @@ import { InformationReporter } from './InformationReporter';
 import { defaults, marked } from 'marked';
 import { TaskProcessingUnit } from './TaskProcessingUnit';
 import { FeatureStudios } from './featurestudios';
+import { RequestCache } from './common/requestcache';
+import { CoalescedSave } from './common/coalescedsave';
+
+const GLOBAL_LIBRARY_CACHE_TTL = 3 * 60 * 60 * 1000;
 
 export interface magicIconInfo {
     label: string;
@@ -158,6 +162,39 @@ export class App extends BaseApp {
     public targetDocumentElementInfo: BTDocumentElementInfo = {};
     public appName: string = APP_NAME;
     public searchLoadChunk = 10; // Number of documents to load at a time for search results
+    private folderPages = new RequestCache<BTGlobalTreeNodesInfo>();
+    private libraryContexts = new RequestCache<BTGlobalTreeProxyInfo>();
+    private folderObserver: IntersectionObserver;
+    private lastLocationSave: CoalescedSave<BTGlobalTreeNodeInfo[]>;
+    private globalLibraryReads = new RequestCache<any>(GLOBAL_LIBRARY_CACHE_TTL, 128);
+    private visitedGlobalLibraries = new Set<string>();
+    private insertChoices = new RequestCache<BTInsertableInfo[]>(5 * 60 * 1000, 128);
+
+    private getGlobalLibraryRead<T>(
+        libraryId: string,
+        key: string,
+        load: () => Promise<T>
+    ): Promise<T> {
+        if (!this.visitedGlobalLibraries) this.visitedGlobalLibraries = new Set();
+        const isGlobal = libraryId === 'GL' ||
+            (this.globalLibrariesNodes || []).indexOf(libraryId) !== -1 ||
+            this.visitedGlobalLibraries.has(libraryId) ||
+            (this.currentBreadcrumbs || []).some((node) => node.id === 'GL');
+        if (!isGlobal) return load();
+        this.visitedGlobalLibraries.add(libraryId);
+        if (!this.globalLibraryReads) this.globalLibraryReads = new RequestCache<any>(GLOBAL_LIBRARY_CACHE_TTL, 128);
+        const revision = this.libraries.browseRevision || 0;
+        return this.globalLibraryReads.get(revision + ':' + key, load)
+            .then((value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
+    }
+
+    // Rendering normalizes library names and node types, so never render cached objects directly.
+    private getFolderPage(
+        key: string,
+        load: () => Promise<BTGlobalTreeNodesInfo>
+    ): Promise<BTGlobalTreeNodesInfo> {
+        return this.folderPages.get(key, load).then((info) => JSON.parse(JSON.stringify(info)));
+    }
 
     private globalLibrariesNodes: string[] = [
         '2fd951db6d0261aba5f16a5d', //AndyMark
@@ -480,13 +517,8 @@ export class App extends BaseApp {
             .initUserPreferences(this.appName)
             .then((_val) => {
                 if (_val === undefined || _val === null) {
-                    if (this.onshape.freeUser) {
-                        return this.startAppContent();
-                    } else {
-                        console.error(
-                            'Cannot create initialize user preferences. They are not a free user'
-                        );
-                    }
+                    this.failApp('Unable to initialize preferences. Reload to retry.');
+                    return;
                 }
 
                 this.startAppPreferences()
@@ -577,7 +609,26 @@ export class App extends BaseApp {
      * @param location Location to
      */
     public saveLastLocation(location: folderLocation): void {
-        this.preferences.setLastKnownLocation(location.pathToRoot);
+        this.getLastLocationSave().schedule(this.normalizeLastLocation(location.pathToRoot));
+    }
+
+    private normalizeLastLocation(locations: BTGlobalTreeNodeInfo[]): BTGlobalTreeNodeInfo[] {
+        return !locations?.length || (locations.length === 1 && locations[0].jsonType === 'home')
+            ? [] : locations;
+    }
+
+    private getLastLocationSave(savedLocation?: BTGlobalTreeNodeInfo[]): CoalescedSave<BTGlobalTreeNodeInfo[]> {
+        if (!this.lastLocationSave) {
+            this.lastLocationSave = new CoalescedSave((pathToRoot) =>
+                this.preferences.setLastKnownLocation(pathToRoot), 500, savedLocation
+            );
+            // Start pending work when the panel is hidden or closed; completion on close is best effort.
+            window.addEventListener('pagehide', () => this.lastLocationSave.flush());
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') this.lastLocationSave.flush();
+            });
+        }
+        return this.lastLocationSave;
     }
     /**
      * Restore the last saved location
@@ -588,6 +639,7 @@ export class App extends BaseApp {
             this.preferences
                 .getLastKnownLocation()
                 .then((locations) => {
+                    this.getLastLocationSave(this.normalizeLastLocation(locations));
                     if (
                         locations === null ||
                         locations === undefined ||
@@ -1176,7 +1228,7 @@ export class App extends BaseApp {
                 this.globalLibrariesNodes.indexOf(item.id) !== -1
             ) {
                 // It has an image, so request the thumbnail to be loaded for it
-                img = this.onshape.createThumbnailImage(itemInfo);
+                img = this.onshape.createThumbnailImage(itemInfo, { lazy: true });
                 img.classList.add('os-thumbnail-image');
                 img.setAttribute('draggable', 'false');
                 img.setAttribute('alt', 'Thumbnail image for a document.');
@@ -2973,133 +3025,143 @@ export class App extends BaseApp {
         item: BTDocumentSummaryInfo,
         insertType: GBTElementType
     ): Promise<BTInsertableInfo[]> {
-        return new Promise(async (resolve, _reject) => {
-            let versionId: string = undefined;
-            if (item.recentVersion !== null && item.recentVersion !== undefined) {
-                versionId = item.recentVersion.id;
-            }
-            // If item.defaultWorkspace is empty or item.defaultWorkspace.id is null then we need to
-            // call https://cad.onshape.com/glassworks/explorer/#/Document/getDocumentWorkspaces to get a workspace
-            // for now we will assume it is always provided
-            let wv = 'w';
-            let wvid = '';
-            if (versionId !== undefined) {
-                wv = 'v';
-                wvid = versionId;
-            } else if (
-                item.defaultWorkspace !== null &&
-                item.defaultWorkspace !== undefined
-            ) {
-                wv = 'w';
-                wvid = item.defaultWorkspace.id;
-            }
-            const parameters: GetInsertablesRequest = {
-                did: item.id,
-                wv: wv,
-                wvid: wvid,
-                includeParts: true,
-                includeSurfaces: false,
-                includeSketches: false,
-                includeReferenceFeatures: false,
-                includeAssemblies: true,
-                includeFeatureStudios: true,
-                includeBlobs: false,
-                includePartStudios: true,
-                includeFeatures: true,
-                includeMeshes: false,
-                includeWires: false,
-                includeFlattenedBodies: false,
-                includeApplications: false,
-                includeCompositeParts: true,
-                includeFSTables: false,
-                includeFSComputedPartPropertyFunctions: false,
-                includeVariables: false,
-                includeVariableStudios: false,
-            };
+        const versionId = item.recentVersion && item.recentVersion.id;
+        if (!versionId) return this.fetchInsertChoices(item, insertType);
+        if (!this.insertChoices) this.insertChoices = new RequestCache<BTInsertableInfo[]>(5 * 60 * 1000, 128);
+        const key = JSON.stringify([item.id, versionId, insertType]);
+        return this.insertChoices.get(key, () => this.fetchInsertChoices(item, insertType))
+            .then((choices) => JSON.parse(JSON.stringify(choices)));
+    }
 
-            let insertables = await this.onshape.documentApi.getInsertables(parameters);
-            const result: BTInsertableInfo[] = [];
-            let donotuseelement: BTInsertableInfo = undefined;
-            const insertMap: { [key: string]: BTInsertableInfo } = {};
-            const dropParents = new Map<string, Boolean>();
-            while (insertables !== undefined && insertables.items.length > 0) {
-                console.log(insertables);
-                for (let element of insertables.items) {
-                    if (
-                        element.elementType === 'PARTSTUDIO' ||
-                        (element.elementType === 'ASSEMBLY' &&
-                            insertType === element.elementType) ||
-                        element.elementType === 'FEATURESTUDIO'
-                    ) {
-                        let elementName = (element.elementName ?? '').toUpperCase();
-                        let elementPartName = (element.partName ?? '').toUpperCase();
+    private async fetchInsertChoices(
+        item: BTDocumentSummaryInfo,
+        insertType: GBTElementType
+    ): Promise<BTInsertableInfo[]> {
+        let versionId: string = undefined;
+        if (item.recentVersion !== null && item.recentVersion !== undefined) {
+            versionId = item.recentVersion.id;
+        }
+        // If item.defaultWorkspace is empty or item.defaultWorkspace.id is null then we need to
+        // call https://cad.onshape.com/glassworks/explorer/#/Document/getDocumentWorkspaces to get a workspace
+        // for now we will assume it is always provided
+        let wv = 'w';
+        let wvid = '';
+        if (versionId !== undefined) {
+            wv = 'v';
+            wvid = versionId;
+        } else if (
+            item.defaultWorkspace !== null &&
+            item.defaultWorkspace !== undefined
+        ) {
+            wv = 'w';
+            wvid = item.defaultWorkspace.id;
+        }
+        const parameters: GetInsertablesRequest = {
+            did: item.id,
+            wv: wv,
+            wvid: wvid,
+            includeParts: true,
+            includeSurfaces: false,
+            includeSketches: false,
+            includeReferenceFeatures: false,
+            includeAssemblies: true,
+            includeFeatureStudios: true,
+            includeBlobs: false,
+            includePartStudios: true,
+            includeFeatures: true,
+            includeMeshes: false,
+            includeWires: false,
+            includeFlattenedBodies: false,
+            includeApplications: false,
+            includeCompositeParts: true,
+            includeFSTables: false,
+            includeFSComputedPartPropertyFunctions: false,
+            includeVariables: false,
+            includeVariableStudios: false,
+        };
 
-                        if (
-                            elementName !== 'DO NOT USE ICON' &&
-                            elementPartName.indexOf('LEGACY PART') < 0 &&
-                            elementName.indexOf('LEGACY PART') < 0 //is this necessary?
-                        ) {
-                            // We want to save it
-                            insertMap[element.id] = element;
-                        } else {
-                            // Save for the special case of the DO NOT USE ICON which would be the only object in the document
-                            donotuseelement = element;
-                        }
-                        if (
-                            elementPartName.indexOf('DO NOT USE THESE PARTS') >= 0 ||
-                            elementPartName.indexOf('PARTS DO NOT USE') >= 0 ||
-                            elementPartName.indexOf('DO NOT USE PARTS') >= 0 ||
-                            elementName.indexOf('DO NOT USE THESE PARTS') >= 0 ||
-                            elementName.indexOf('PARTS DO NOT USE') >= 0 ||
-                            elementName.indexOf('DO NOT USE PARTS') >= 0
-                        ) {
-                            if (
-                                element.parentId !== undefined &&
-                                element.parentId !== null
-                            ) {
-                                dropParents[element.parentId] = true;
-                            } else {
-                                delete insertMap[element.id];
-                            }
-                        }
-                    }
-                }
-                // If we are finished with the list return it
-                if (insertables.next === undefined || insertables.next === null) {
-                    insertables = undefined;
-                } else {
-                    insertables = (await this.onshape.OnshapeRequest(
-                        insertables.next,
-                        BTInsertablesListResponseFromJSON
-                    )) as BTInsertablesListResponse;
-                }
-            }
-            // We have built a map of all the options, now go through and prune any parents
-            for (const id in insertMap) {
-                const element = insertMap[id];
+        let insertables = await this.onshape.documentApi.getInsertables(parameters);
+        const result: BTInsertableInfo[] = [];
+        let donotuseelement: BTInsertableInfo = undefined;
+        const insertMap: { [key: string]: BTInsertableInfo } = {};
+        const dropParents = new Map<string, Boolean>();
+        while (insertables !== undefined && insertables.items.length > 0) {
+            console.log(insertables);
+            for (let element of insertables.items) {
                 if (
-                    element !== undefined &&
-                    element !== null &&
-                    element.parentId !== undefined &&
-                    element.parentId !== null
+                    element.elementType === 'PARTSTUDIO' ||
+                    (element.elementType === 'ASSEMBLY' &&
+                        insertType === element.elementType) ||
+                    element.elementType === 'FEATURESTUDIO'
                 ) {
-                    insertMap[element.parentId] = undefined;
-                }
-            }
-            for (const id in insertMap) {
-                const element = insertMap[id];
-                if (element !== undefined) {
-                    if (!dropParents[element.parentId]) {
-                        result.push(insertMap[id]);
+                    let elementName = (element.elementName ?? '').toUpperCase();
+                    let elementPartName = (element.partName ?? '').toUpperCase();
+
+                    if (
+                        elementName !== 'DO NOT USE ICON' &&
+                        elementPartName.indexOf('LEGACY PART') < 0 &&
+                        elementName.indexOf('LEGACY PART') < 0 //is this necessary?
+                    ) {
+                        // We want to save it
+                        insertMap[element.id] = element;
+                    } else {
+                        // Save for the special case of the DO NOT USE ICON which would be the only object in the document
+                        donotuseelement = element;
+                    }
+                    if (
+                        elementPartName.indexOf('DO NOT USE THESE PARTS') >= 0 ||
+                        elementPartName.indexOf('PARTS DO NOT USE') >= 0 ||
+                        elementPartName.indexOf('DO NOT USE PARTS') >= 0 ||
+                        elementName.indexOf('DO NOT USE THESE PARTS') >= 0 ||
+                        elementName.indexOf('PARTS DO NOT USE') >= 0 ||
+                        elementName.indexOf('DO NOT USE PARTS') >= 0
+                    ) {
+                        if (
+                            element.parentId !== undefined &&
+                            element.parentId !== null
+                        ) {
+                            dropParents[element.parentId] = true;
+                        } else {
+                            delete insertMap[element.id];
+                        }
                     }
                 }
             }
-            // Special case when we have a document with a do not use and it is the only thing, let them insert it
-            if (result.length === 0 && donotuseelement !== undefined) {
-                result.push(donotuseelement);
+            // If we are finished with the list return it
+            if (insertables.next === undefined || insertables.next === null) {
+                insertables = undefined;
+            } else {
+                insertables = (await this.onshape.OnshapeRequest(
+                    insertables.next,
+                    BTInsertablesListResponseFromJSON
+                )) as BTInsertablesListResponse;
             }
-            resolve(result);
-        });
+        }
+        // We have built a map of all the options, now go through and prune any parents
+        for (const id in insertMap) {
+            const element = insertMap[id];
+            if (
+                element !== undefined &&
+                element !== null &&
+                element.parentId !== undefined &&
+                element.parentId !== null
+            ) {
+                insertMap[element.parentId] = undefined;
+            }
+        }
+        for (const id in insertMap) {
+            const element = insertMap[id];
+            if (element !== undefined) {
+                if (!dropParents[element.parentId]) {
+                    result.push(insertMap[id]);
+                }
+            }
+        }
+        // Special case when we have a document with a do not use and it is the only thing, let them insert it
+        if (result.length === 0 && donotuseelement !== undefined) {
+            result.push(donotuseelement);
+        }
+        return result;
     }
     /**
      *
@@ -3117,7 +3179,7 @@ export class App extends BaseApp {
                 item.recentVersion.id !== null &&
                 item.recentVersion.id !== undefined
             ) {
-                resolve(item);
+                return resolve(item);
             }
             this.onshape.documentApi
                 .getDocumentVersions({ did: item.id })
@@ -4554,11 +4616,11 @@ export class App extends BaseApp {
         index?: number,
         refreshNodes?: boolean
     ) {
-        const documentRequests: Promise<BTGlobalTreeNodeInfo>[] = [];
-        for (let did of this.globalLibrariesNodes) {
-            documentRequests.push(this.onshape.documentApi.getDocument({ did }));
-        }
-        Promise.all(documentRequests).then((documents: BTGlobalTreeNodeInfo[]) => {
+        this.getGlobalLibraryRead('GL', 'global-list', () =>
+            Promise.all(this.globalLibrariesNodes.map((did) =>
+                this.onshape.documentApi.getDocument({ did })
+            ))
+        ).then((documents: BTGlobalTreeNodeInfo[]) => {
             const recentNode: BTGlobalTreeNodesInfo = {
                 pathToRoot,
                 next: (index + 1).toString(),
@@ -4721,7 +4783,9 @@ export class App extends BaseApp {
         }
 
         return new Promise((resolve, reject) => {
-            this.libraries.getLibrarySearchInfo(id).then((res) => {
+            this.getGlobalLibraryRead(id, 'search:' + id, () =>
+                this.libraries.getLibrarySearchInfo(id)
+            ).then((res) => {
                 if (res === undefined) res = [];
                 let items = res as SearchInfoNode[];
                 console.log(`library ${id} has ${items.length} items`);
@@ -4769,7 +4833,7 @@ export class App extends BaseApp {
 
                 if (skipRender) return resolve(this.currentSearchItems.length > 0);
                 resolve(this.getSearchItemByIndex(accessId, 0));
-            });
+            }).catch(reject);
         });
     }
 
@@ -5146,6 +5210,7 @@ export class App extends BaseApp {
                 offset,
             })
             .then((res) => {
+                if (!this.validAccessId(accessId)) return;
                 this.setBreadcrumbs(res.pathToRoot);
                 this.ProcessNodeResults(res, accessId);
             })
@@ -5160,10 +5225,12 @@ export class App extends BaseApp {
         accessId: string,
         teamroot?: BTGlobalTreeNodeInfo
     ): void {
+        if (!this.validAccessId(accessId)) return;
         switch (info.pathToRoot[0].resourceType) {
             case 'folder': {
-                this.onshape
-                    .OnshapeRequest(info.next, BTGlobalTreeNodesInfoFromJSON)
+                this.getFolderPage('page:' + info.next, () =>
+                    this.onshape.OnshapeRequest(info.next, BTGlobalTreeNodesInfoFromJSON)
+                )
                     .then((res: BTGlobalTreeNodesInfo) => {
                         this.ProcessNodeResults(res, accessId, teamroot);
                     });
@@ -5301,6 +5368,7 @@ export class App extends BaseApp {
                 },
                 { threshold: [0] }
             );
+            this.folderObserver = observer;
             observer.observe(rowelem);
         }
     }
@@ -5348,6 +5416,8 @@ export class App extends BaseApp {
      * @param teamroot Preserved team root so that we know when we are processing a folder under a team
      */
     public gotoFolder(item: BTGlobalTreeNodeInfo, teamroot?: BTGlobalTreeNodeInfo): void {
+        if (this.folderObserver) this.folderObserver.disconnect();
+        this.onshape.cancelPendingThumbnails();
         this.hidePopup();
         this.hideActionMenu();
         this.hideBoxSelect();
@@ -5371,8 +5441,8 @@ export class App extends BaseApp {
         container.innerHTML = '';
         dumpNodes.appendChild(container);
         if (item.jsonType === 'team-summary') {
-            this.onshape.globalTreeNodesApi
-                .globalTreeNodesTeamInsertables({
+            this.getFolderPage('team:' + item.id, () =>
+                this.onshape.globalTreeNodesApi.globalTreeNodesTeamInsertables({
                     teamId: item.id,
                     getPathToRoot: true,
                     includeAssemblies: true,
@@ -5381,7 +5451,9 @@ export class App extends BaseApp {
                     includeSketches: false,
                     includeSurfaces: false,
                 })
+            )
                 .then((res) => {
+                    if (!this.validAccessId(accessId)) return;
                     if (
                         res.pathToRoot &&
                         res.pathToRoot[0] &&
@@ -5397,9 +5469,12 @@ export class App extends BaseApp {
                     console.log(`**** Call failed: ${err}`);
                 });
         } else if (item.jsonType === 'proxy-library') {
-            this.libraries
-                .getProxyLibrary(undefined, item.id)
+            this.getGlobalLibraryRead(item.id, 'library:' + item.id, () =>
+                this.libraries.getProxyLibrary(undefined, item.id)
+            )
                 .then((res) => {
+                    if (!this.validAccessId(accessId)) return;
+                    this.libraryContexts.get(item.id, () => Promise.resolve(res.library));
                     this.addBreadcrumbNode(item);
                     //add notification for community library, a little hacky but it will work
                     if (item.id === this.communityLibraryNode) {
@@ -5418,20 +5493,30 @@ export class App extends BaseApp {
                     );
                 })
                 .catch((err) => {
+                    if (!this.validAccessId(accessId)) return;
                     if (err.status === 403) {
                         //User should delete library
                         dumpNodes.innerText =
                             'Library does not exist\nPlease recover it or remove this library';
                         this.processMagicNode(this.currentBreadcrumbs[0].id, accessId);
+                    } else {
+                        dumpNodes.innerText = 'Unable to load library. Open it again to retry.';
                     }
                 });
         } else if (item.jsonType === 'proxy-folder') {
-            this.libraries.getProxyLibrary(undefined, item.projectId).then((res) => {
-                if (res !== undefined) {
-                    const { library } = res;
+            this.libraryContexts.get(item.projectId, () =>
+                this.getGlobalLibraryRead(item.projectId, 'library:' + item.projectId, () =>
+                    this.libraries.getProxyLibrary(undefined, item.projectId)
+                )
+                    .then((res) => res && res.library)
+            ).then((library) => {
+                if (!this.validAccessId(accessId)) return;
+                if (library !== undefined) {
                     this.addBreadcrumbNode(item);
                     //use breadcrumbs for library
-                    this.libraries.getProxyFolder(library, item.id).then((res) => {
+                    return this.getGlobalLibraryRead(item.projectId, 'folder:' + item.projectId + ':' + item.id, () =>
+                        this.libraries.getProxyFolder(library, item.id)
+                    ).then((res) => {
                         this.ProcessNodeResults(
                             {
                                 items: res,
@@ -5442,6 +5527,8 @@ export class App extends BaseApp {
                         );
                     });
                 }
+            }).catch(() => {
+                if (this.validAccessId(accessId)) dumpNodes.innerText = 'Unable to load library folder. Open it again to retry.';
             });
         } else if (item.jsonType === 'home') {
             this.processHome(dumpNodes);
@@ -5457,8 +5544,8 @@ export class App extends BaseApp {
             }
             this.processSearch(item, accessId);
         } else {
-            this.onshape.globalTreeNodesApi
-                .globalTreeNodesFolderInsertables({
+            this.getFolderPage('folder:' + item.id, () =>
+                this.onshape.globalTreeNodesApi.globalTreeNodesFolderInsertables({
                     fid: item.id,
                     getPathToRoot: true,
                     includeAssemblies: true,
@@ -5467,7 +5554,9 @@ export class App extends BaseApp {
                     includeSketches: false,
                     includeSurfaces: false,
                 })
+            )
                 .then((res) => {
+                    if (!this.validAccessId(accessId)) return;
                     this.addBreadcrumbNode(
                         (res && res.pathToRoot && res.pathToRoot[0]) || item
                     );

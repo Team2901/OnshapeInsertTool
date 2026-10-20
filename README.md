@@ -41,6 +41,75 @@ If you have done everything right, when you add the application to your account,
 
 To make change to the application, edit the `app/app.ts` file.  It is built on top of the `app/baseapp.ts` file which has all the common routines.
 
+## Preferences storage
+
+Preferences normally live in a Blob element in an Onshape preferences document.
+If Onshape rejects creation because a free account cannot use private documents,
+the app stores preferences in browser local storage instead. This includes favorites,
+Recently Inserted, custom settings, and the last browsing location. It does not
+create a public preferences document as a fallback. Existing Onshape preferences
+documents remain supported.
+
+Local preferences stay in the current browser profile and app origin, scoped to
+the app name and authenticated user ID. The app resolves identity before loading
+stored preferences; when identity is unavailable, local preferences stay in the
+current session and saves report failure. Old preferences stored without a user
+ID are ignored because they cannot be safely assigned to an account.
+Open panels read the latest stored preferences before updates and use browser
+Web Locks, when available, to serialize writes. They do not sync between
+browsers. Clearing site data removes them. If browser storage is unavailable,
+preferences remain available for the current session, but saves report failure.
+Other initialization errors stop startup with a retry message instead of continuing
+with an invalid preferences location.
+
+Startup reads the last browsing location once and remembers it so restoring the
+same location does not write preferences again. Empty breadcrumbs and the home
+location are treated as equivalent. Location changes are debounced for 500 ms,
+with only the latest pending location saved. Failed reads do not count as saved
+locations, and failed saves can be retried on a later navigation.
+
+## API rate limiting
+
+The app tracks `X-Rate-Limit-Remaining` separately for each API operation, sharing
+the cooldown across document IDs and query configurations. A low quota on a
+library read does not delay an assembly insertion. Calls to the affected operation
+retain the existing conservative pacing and honor `Retry-After` when supplied.
+The app does not automatically replay failed writes.
+
+Both proxies follow up to three redirects for thumbnail GET requests. Each hop
+must stay on the original HTTPS origin (scheme, host, and port) and have no URL
+credentials. Redirect bodies are discarded; the final image is streamed normally.
+Other API requests do not gain automatic redirect following.
+
+Run `npm test` to validate rate limiting and browsing behavior.
+
+Failed library reads are not cached. Reopen a library or folder to retry after
+a temporary network or API error.
+
+Proxy libraries and preferences share a document-to-workspace-ID cache in the
+current app session. It retains up to 64 documents for five minutes and shares
+concurrent lookups. Failed lookups and documents with no available workspace
+are not cached. Workspace selection still uses the first workspace returned
+by Onshape; operations that need the full workspace list continue to fetch it.
+
+## PHP API proxy responses
+
+The PHP API proxy forwards response body chunks as cURL receives them instead of
+holding the entire response in a PHP string. It preserves the upstream status,
+content type, rate-limit remaining count, and retry-after header. Optional logging
+retains only the first 200 body bytes.
+
+The proxy leaves hosting output buffers and compression settings unchanged.
+PHP, the web server, or a reverse proxy may still buffer delivery, so earlier
+arrival of bytes depends on the host. If an upstream transfer fails before body
+output, the proxy returns a 502 JSON error. If it fails after output starts, the
+response may be truncated; the proxy cannot replace its status and does not
+append error text to the partially transmitted JSON or image.
+
+Run `npm run test:php` with PHP, the cURL extension, and OpenSSL installed to
+validate streaming and redirects against local HTTP and HTTPS upstreams.
+Set `PHP_BIN` and `OPENSSL_BIN` to their executable paths if they are not on PATH.
+
 ## Having two deployment locations
 
 When developming it is useful to have a test location as well as a production version.

@@ -74,6 +74,8 @@ import {
     BTThumbnailInfo,
 } from 'onshape-typescript-fetch';
 import { createDocumentElement } from './common/htmldom';
+import { RequestCache } from './common/requestcache';
+import { RateLimitMiddleware } from './common/ratelimit';
 
 // Optional parameters when creating a thumbnail
 type createThumbnailOptions = {
@@ -83,6 +85,7 @@ type createThumbnailOptions = {
     retryInterval?: number;
     id?: string;
     thumbnailId?: string;
+    lazy?: boolean;
 };
 
 // A function to notify in the case of catastrophic failure
@@ -107,49 +110,36 @@ export type onshapeConfig = {
  * because everything you will want to override will be in app.ts (or other files you extend it with)
  */
 
-class Blarg implements runtime.Middleware {
-    public retry = 0;
-    public remaining = 0;
-    public lastResponseTime = 0;
-
-    async post(context: runtime.ResponseContext) {
-        this.remaining = Number(
-            context.response.headers.get('X-Rate-Limit-Remaining') ?? 0
-        );
-
-        this.retry = Number(context.response.headers.get('Retry-After') ?? 0);
-
-        console.log(
-            `Response received. Remaining: ${this.remaining}, Retry: ${this.retry}`
-        );
-        this.lastResponseTime = Date.now();
-
-        return context.response;
-    }
-
-    async pre(context: runtime.RequestContext) {
-        let timeout = 0;
-
-        if (this.remaining < 50) timeout = 15000;
-        else if (this.remaining < 75) timeout = 10000;
-        else if (this.remaining < 100) timeout = 5000;
-        else if (this.remaining < 300) timeout = 2000;
-        else if (this.remaining < 500) timeout = 1000;
-        else if (this.remaining < 750) timeout = 100;
-        else if (this.remaining < 1000) timeout = 10;
-
-        const sleepTime = Math.max(0, this.lastResponseTime + timeout - Date.now());
-
-        // console.log(`Sleeping for ${sleepTime}ms`);
-
-        if (sleepTime > 0) {
-            await new Promise((r) => setTimeout(r, sleepTime));
-        }
-
-        return context;
-    }
-}
 export class OnshapeAPI {
+    private workspaceIdCache = new RequestCache<string>();
+    private thumbnailCache = new RequestCache<string>(60000, 100);
+    private pendingThumbnails = new Map<Element, () => void>();
+    private thumbnailObserver: IntersectionObserver;
+
+    public cancelPendingThumbnails(): void {
+        if (this.thumbnailObserver) this.thumbnailObserver.disconnect();
+        this.pendingThumbnails.clear();
+    }
+
+    private loadVisibleThumbnail(image: HTMLImageElement, load: () => void): void {
+        if (typeof IntersectionObserver === 'undefined') {
+            load();
+            return;
+        }
+        if (!this.thumbnailObserver) {
+            this.thumbnailObserver = new IntersectionObserver((entries) => {
+                for (const entry of entries) {
+                    if (!entry.isIntersecting) continue;
+                    const task = this.pendingThumbnails.get(entry.target);
+                    this.pendingThumbnails.delete(entry.target);
+                    this.thumbnailObserver.unobserve(entry.target);
+                    if (task && entry.target.isConnected) task();
+                }
+            }, { rootMargin: '100px' });
+        }
+        this.pendingThumbnails.set(image, load);
+        this.thumbnailObserver.observe(image);
+    }
     public documentId = '';
     public workspaceId = '';
     public elementId = '';
@@ -244,6 +234,15 @@ export class OnshapeAPI {
             }
         }
     }
+    public getDocumentWorkspaceId(did: string): Promise<string> {
+        return this.workspaceIdCache.get(did, async () => {
+            const workspaces = await this.documentApi.getDocumentWorkspaces({ did });
+            const workspaceId = workspaces?.[0]?.id;
+            if (!workspaceId) throw new Error('Document has no available workspace');
+            return workspaceId;
+        });
+    }
+
     public defaultAppFailure(reason: String): void {
         console.log(`Uncaught app failure`);
     }
@@ -374,7 +373,7 @@ export class OnshapeAPI {
                 'X-SPECIAL-HEADER': 'ONSHAPEAPIPROXY',
             },
             //header params we want to use on every request
-            middleware: [new Blarg()],
+            middleware: [new RateLimitMiddleware()],
         };
         //
         // For the URLs that get returned from Onshape APIs, we need to
@@ -445,6 +444,12 @@ export class OnshapeAPI {
      * @returns base 64 image data string
      */
     public getThumbnail(urlReq: string): Promise<string> {
+        return this.thumbnailCache.get(this.fixOnshapeURI(urlReq), () =>
+            this.fetchThumbnail(urlReq)
+        );
+    }
+
+    private fetchThumbnail(urlReq: string): Promise<string> {
         return new Promise((resolve, reject) => {
             let xhr = new XMLHttpRequest();
 
@@ -471,13 +476,15 @@ export class OnshapeAPI {
                         } else {
                             // Parse out the downloaded image into a data URL (this automatically base64 encodes it)
                             var reader = new FileReader();
+                            reader.onerror = () => reject(reader.error);
                             reader.readAsDataURL(xhr.response);
                             reader.onloadend = function () {
                                 resolve(reader.result.toString());
                             };
                         }
                     } else {
-                        reject(xhr.responseText);
+                        // responseText throws for blob responses and would leave the cached read pending.
+                        reject(new Error('Thumbnail request failed: ' + xhr.status));
                     }
                 }
             };
@@ -505,6 +512,7 @@ export class OnshapeAPI {
             retryInterval = 2,
             id = undefined,
             thumbnailId = undefined,
+            lazy = false,
         } = options || {};
         // // Override any defaults
         // if (options !== undefined) {
@@ -576,7 +584,7 @@ export class OnshapeAPI {
             id: id,
         }) as HTMLImageElement;
 
-        this.getThumbnail(imageURL)
+        const load = () => this.getThumbnail(imageURL)
             .then((src) => {
                 imgChildThumbnail.setAttribute('src', src);
             })
@@ -585,6 +593,8 @@ export class OnshapeAPI {
                     this.retryThumbnail(imgChildThumbnail, imageURL, retryInterval, 20);
                 }
             });
+        if (lazy) this.loadVisibleThumbnail(imgChildThumbnail, load);
+        else load();
         return imgChildThumbnail;
     }
     /**

@@ -23,6 +23,7 @@ interface deltaInfo {
 }
 
 export class Library extends Preferences {
+    public browseRevision = 0;
     proxyChildrenName = SPECIALCHAR + 'children' + SPECIALCHAR;
     proxyDescendantName = SPECIALCHAR + 'descendant' + SPECIALCHAR;
     proxyParentFolder = SPECIALCHAR + 'parentfolder' + SPECIALCHAR;
@@ -1350,17 +1351,10 @@ export class Library extends Preferences {
     }
 
     public getLibrarySearchInfo(libraryId: string): Promise<BTGlobalTreeNodeInfo[]> {
-        return new Promise((resolve, reject) => {
-            this.getProxyLibrary(undefined, libraryId).then((res) => {
-                if (res === undefined) return resolve(undefined);
-                let { library } = res;
-                this.getAppElement(this.searchInfoName, library).then((res) => {
-                    if (res === undefined) resolve(undefined);
-                    this.getBTGArray('all', library).then((res) => {
-                        resolve(res);
-                    });
-                });
-            });
+        return this.getProxyLibrary(undefined, libraryId).then(async (res) => {
+            if (res === undefined) return undefined;
+            const library = await this.getAppElement(this.searchInfoName, res.library);
+            return this.getBTGArray('all', library);
         });
     }
     public setLibrarySearchInfo(
@@ -1368,6 +1362,7 @@ export class Library extends Preferences {
         library?: BTGlobalTreeNodeInfo,
         libraryId?: string
     ): Promise<boolean> {
+        this.browseRevision++;
         return new Promise((resolve, reject) => {
             if (library === undefined && libraryId === undefined)
                 return reject('Either library or libraryId must be passed in.');
@@ -1381,6 +1376,7 @@ export class Library extends Preferences {
                 this.getAppElement(this.searchInfoName, library).then((res) => {
                     if (res === undefined) resolve(undefined);
                     this.setBTGArray(library, 'all', info).then((res2) => {
+                        this.browseRevision++;
                         resolve(res2);
                     });
                 });
@@ -1557,11 +1553,13 @@ export class Library extends Preferences {
         library: BTGlobalTreeNodeInfo,
         entries: Array<BTGlobalTreeNodeInfo>
     ): Promise<boolean> {
+        this.browseRevision++;
         // console.log('library set to : ', entries);
         return new Promise((resolve, _reject) => {
             // console.log('-ElementID-', library['elementId']);
             // console.log('_______');
             this.setBTGArray(library, this.proxyChildrenName, entries).then((res) => {
+                this.browseRevision++;
                 resolve(res);
             });
         });
@@ -1633,11 +1631,10 @@ export class Library extends Preferences {
                                             this.encodeLibraryName(libraryName);
                                         resolve({ contents, library, descendants });
                                     }
-                                );
+                                ).catch(reject);
                             })
                             .catch((err) => {
-                                console.log(err);
-                                resolve(undefined);
+                                reject(err);
                             });
                     }
                 })
@@ -1720,10 +1717,10 @@ export class Library extends Preferences {
                     true
                 );
 
-                this.onshape.documentApi
-                    .getDocumentWorkspaces({ did: res.items[0].id })
-                    .then((res) => {
-                        document.wvmid = res[0].id;
+                this.onshape
+                    .getDocumentWorkspaceId(res.items[0].id)
+                    .then((workspaceId) => {
+                        document.wvmid = workspaceId;
                         document.wvm = GetAssociativeDataWvmEnum['w'];
 
                         resolve(document);
@@ -1754,6 +1751,7 @@ export class Library extends Preferences {
         folder: BTGlobalTreeNodeInfo,
         entries: Array<BTGlobalTreeNodeInfo>
     ): Promise<boolean> {
+        this.browseRevision++;
         return new Promise((resolve, _reject) => {
             library = Object.assign({}, library);
             this.getAppElement(folder.id, library)
@@ -1767,6 +1765,7 @@ export class Library extends Preferences {
                     // );
                     this.setBTGArray(folderElement, this.proxyChildrenName, entries).then(
                         (res) => {
+                            this.browseRevision++;
                             resolve(res);
                         }
                     );
@@ -1790,10 +1789,10 @@ export class Library extends Preferences {
             library = Object.assign({}, library);
             this.getAppElement(folderId, library)
                 .then((folder: BTGlobalTreeNodeInfo) => {
-                    if (folder === undefined) resolve(undefined);
+                    if (folder === undefined) return resolve(undefined);
                     this.getBTGArray(this.proxyChildrenName, folder).then((res) => {
                         resolve(res);
-                    });
+                    }).catch(_reject);
                 })
                 .catch((err) => {
                     _reject(err);

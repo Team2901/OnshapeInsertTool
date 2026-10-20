@@ -80,6 +80,7 @@ Parts libraries are libraries of Onshape documents. Owners of the libraries can 
   
 - **Preferences**
   - This document appears as "⚙ Preferences ⚙" and stores user-specific information about the Insert Tool extension.
+  - If your account cannot create a private preferences document, favorites, Recently Inserted, and your last location are saved in this browser instead. They do not sync across browsers and are removed when you clear site data.
 
 
 - **Parts Library Document**

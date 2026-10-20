@@ -4,6 +4,8 @@
   "description": "",
   "main": "app/oauthexample.ts",
   "scripts": {
+    "test": "node --test tests/*.test.cjs",
+    "test:php": "node --test tests/php-proxy.integration.cjs",
     "serve": "webpack serve --mode=development",
     "build": "webpack --mode=production --env=zip=y",
     "dev": "webpack --mode=development",
